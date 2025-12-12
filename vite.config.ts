@@ -3,8 +3,9 @@ import react from '@vitejs/plugin-react-swc';
 import path from 'path';
 
 export default defineConfig({
+  base: process.env.VITE_BASE_PATH || "/",   // ← OVO SI DODALA
   plugins: [react()],
-  publicDir : 'public',
+
   resolve: {
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
     alias: {
@@ -49,18 +50,12 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+
   build: {
     target: 'esnext',
     outDir: 'build',
-    // DODATO - Cache busting:
-    rollupOptions: {
-      output: {
-        entryFileNames: `assets/[name].[hash].js`,
-        chunkFileNames: `assets/[name].[hash].js`,
-        assetFileNames: `assets/[name].[hash].[ext]`
-      }
-    }
   },
+
   server: {
     port: 5173,
     open: true,
