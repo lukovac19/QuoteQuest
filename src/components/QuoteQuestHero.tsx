@@ -12,10 +12,6 @@ import { useState, useEffect } from 'react';
 import { Textarea } from './ui/textarea';
 import { Button } from './ui/button';
 import { toast } from 'sonner@2.0.3';
-import * as pdfjsLib from 'pdfjs-dist';
-
-// Postavi worker za PDF.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 interface Quote {
   id: string;
@@ -152,25 +148,6 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
     setQuestion(followUp);
   };
 
-  // Extract text from PDF
-  const extractTextFromPDF = async (file: File): Promise<string> => {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    
-    let fullText = '';
-    
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(' ');
-      fullText += `\n\n--- Stranica ${i} ---\n${pageText}`;
-    }
-    
-    return fullText;
-  };
-
   const handleSubmit = async () => {
     if (!file) {
       toast.error('Molimo prvo učitajte PDF.');
@@ -190,51 +167,62 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
     setResultType('none');
 
     try {
-      // Extract text from PDF
-      toast.info('Čitam PDF...');
-      const bookContent = await extractTextFromPDF(file);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('question', question);
 
-      // Call Vercel Function
-      const response = await fetch('/api/ask', {
+      const response = await fetch('http://localhost:5000/ask-pdf', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          question: question,
-          bookContent: bookContent
-        })
+        body: formData
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Greška pri pozivu servera.');
+        throw new Error('Greška pri pozivu servera.');
       }
 
       const data = await response.json();
 
-      // Parse response (ovo moraš prilagoditi ovisno o odgovoru tvog API-ja)
-      const answer = data.answer || '';
+      const typeFromServer: ResultType = (data.type as ResultType) || 'quotes';
+      setResultType(typeFromServer);
 
-      // Kreiraj dummy quote sa odgovorom (prilagodi logiku kako ti odgovara)
-      const quote: Quote = {
-        id: `quote-${Date.now()}`,
-        text: answer,
-        page: 0,
+      if (Array.isArray(data.followUp)) {
+        setFollowUpQuestions(data.followUp);
+      }
+
+      const apiQuotes = Array.isArray(data.quotes) ? data.quotes : [];
+
+      if (apiQuotes.length === 0) {
+        toast.error('AI nije pronašao rezultate za ovo pitanje.');
+        setResults([]);
+        setIsAnalyzing(false);
+        return;
+      }
+
+      const quotes: Quote[] = apiQuotes.map((q: any) => ({
+        id: q.id || `quote-${Date.now()}-${Math.random()}`,
+        text: q.text || '',
+        page: typeof q.page === 'number' ? q.page : 0,
         isBookmarked: false,
         expandedContext: false,
-        context: '',
-        element: 'AI Odgovor',
-        meaning: null
-      };
+        context: q.context || '',
+        element: q.element || null,
+        meaning: q.meaning || null
+      }));
 
-      setResults([quote]);
-      setResultType('quotes');
+      setResults(quotes);
 
-      toast.success('Analiza završena!');
-    } catch (err: any) {
+      if (typeFromServer === 'count' && data.meta) {
+        setCountMeta({
+          word: data.meta.word || null,
+          total: data.meta.total || 0,
+          perPage: data.meta.perPage || []
+        });
+      }
+
+      toast.success(`Pronađeno ${quotes.length} rezultata!`);
+    } catch (err) {
       console.error(err);
-      toast.error(err.message || 'Došlo je do greške pri analizi.');
+      toast.error('Došlo je do greške pri analizi.');
       setResultType('none');
     } finally {
       setIsAnalyzing(false);
@@ -298,7 +286,10 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
     .toLowerCase()
     .includes('karakterizacija');
 
+  // Helper to determine if this is a theme/idea type result (no quote display)
   const isThemeOrIdea = resultType === 'theme' || resultType === 'idea' || resultType === 'theme-idea';
+  
+  // Helper to determine if this is a summary (special display)
   const isSummary = resultType === 'summary';
 
   return (
@@ -549,12 +540,14 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
                         )}
 
                         <div className={quote.page > 0 && !isThemeOrIdea && !isSummary ? 'pr-10' : ''}>
+                          {/* TITLE (element field) - Always show in Bosnian */}
                           {quote.element && (
                             <p className="text-[#00D1FF] text-sm uppercase tracking-wide font-[Orbitron] mb-3">
                               {quote.element}
                             </p>
                           )}
 
+                          {/* QUOTE TEXT - Only show if not empty (themes/ideas/summary may have empty text) */}
                           {quote.text && (
                             <p
                               className="text-[#E6F0FF]/80 leading-relaxed mb-3 whitespace-pre-wrap"
@@ -566,12 +559,14 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
                             </p>
                           )}
 
+                          {/* MEANING (💡 explanation) - Always show */}
                           {quote.meaning && (
                             <p className="text-[#7FA4D6] text-sm mb-3 leading-relaxed">
                               💡 {quote.meaning}
                             </p>
                           )}
 
+                          {/* PAGE NUMBER - Only show if > 0 and not summary */}
                           {quote.page > 0 && !isSummary && (
                             <>
                               <div className="flex items-center gap-2 text-sm mb-3">
@@ -580,6 +575,7 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
                                 </span>
                               </div>
 
+                              {/* CONTEXT TOGGLE - Only for quotes/micro-details, not themes/ideas/summary */}
                               {quote.context && !isThemeOrIdea && (
                                 <button
                                   onClick={() => toggleContext(quote.id)}
@@ -603,6 +599,7 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
                         </div>
                       </div>
 
+                      {/* EXPANDED CONTEXT */}
                       {quote.expandedContext && quote.context && quote.page > 0 && !isThemeOrIdea && !isSummary && (
                         <div
                           className="p-4 rounded-xl bg-[#001F54]/20 border border-[#00D1FF]/10"
@@ -616,6 +613,7 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
                     </div>
                   ))}
 
+                  {/* FOLLOW-UP QUESTIONS */}
                   {followUpQuestions.length > 0 && (
                     <div className="pt-4 border-t border-[#00D1FF]/10">
                       <p

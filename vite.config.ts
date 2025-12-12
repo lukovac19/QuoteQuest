@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react-swc';
 import path from 'path';
 
 export default defineConfig({
-  base: process.env.VITE_BASE_PATH || "/",   // ← OVO SI DODALA
+  base: process.env.VITE_BASE_PATH || "/QuoteQuest", 
   plugins: [react()],
 
   resolve: {
