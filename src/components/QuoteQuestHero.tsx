@@ -13,6 +13,8 @@ import { Textarea } from './ui/textarea';
 import { Button } from './ui/button';
 import { toast } from 'sonner@2.0.3';
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 interface Quote {
   id: string;
   text: string;
@@ -166,18 +168,26 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
     setFollowUpQuestions([]);
     setResultType('none');
 
+    // AbortController za timeout (3 minute)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minute
+
     try {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('question', question);
 
-      const response = await fetch('http://localhost:5000/ask-pdf', {
+      const response = await fetch(`${API_URL}/ask-pdf`, {
         method: 'POST',
-        body: formData
+        body: formData,
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
-        throw new Error('Greška pri pozivu servera.');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server greška: ${response.status}`);
       }
 
       const data = await response.json();
@@ -220,9 +230,24 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
       }
 
       toast.success(`Pronađeno ${quotes.length} rezultata!`);
-    } catch (err) {
-      console.error(err);
-      toast.error('Došlo je do greške pri analizi.');
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      console.error("FETCH ERROR:", err);
+      
+      let errorMessage = 'Došlo je do greške pri analizi.';
+      
+      if (err.name === 'AbortError') {
+        errorMessage = 'Analiza je trajala predugo. Pokušajte sa manjim PDF-om ili jednostavnijim pitanjem.';
+      } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+        errorMessage = 'Problem sa internet konekcijom. Provjerite vezu i pokušajte ponovo.';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      toast.error(errorMessage, {
+        duration: 5000
+      });
+      
       setResultType('none');
     } finally {
       setIsAnalyzing(false);
@@ -286,10 +311,7 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
     .toLowerCase()
     .includes('karakterizacija');
 
-  // Helper to determine if this is a theme/idea type result (no quote display)
   const isThemeOrIdea = resultType === 'theme' || resultType === 'idea' || resultType === 'theme-idea';
-  
-  // Helper to determine if this is a summary (special display)
   const isSummary = resultType === 'summary';
 
   return (
@@ -473,6 +495,9 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
                 <div className="flex flex-col items-center justify-center h-full space-y-4">
                   <Loader2 className="w-12 h-12 text-[#00D1FF] animate-spin" />
                   <p className="text-[#E6F0FF]/60">AI analizira tekst...</p>
+                  <p className="text-[#E6F0FF]/40 text-sm text-center">
+                    Ovo može potrajati 1-2 minute za veće PDF-ove
+                  </p>
                 </div>
               ) : resultType !== 'none' && results.length > 0 ? (
                 <div className="space-y-6">
@@ -540,14 +565,12 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
                         )}
 
                         <div className={quote.page > 0 && !isThemeOrIdea && !isSummary ? 'pr-10' : ''}>
-                          {/* TITLE (element field) - Always show in Bosnian */}
                           {quote.element && (
                             <p className="text-[#00D1FF] text-sm uppercase tracking-wide font-[Orbitron] mb-3">
                               {quote.element}
                             </p>
                           )}
 
-                          {/* QUOTE TEXT - Only show if not empty (themes/ideas/summary may have empty text) */}
                           {quote.text && (
                             <p
                               className="text-[#E6F0FF]/80 leading-relaxed mb-3 whitespace-pre-wrap"
@@ -559,14 +582,12 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
                             </p>
                           )}
 
-                          {/* MEANING (💡 explanation) - Always show */}
                           {quote.meaning && (
                             <p className="text-[#7FA4D6] text-sm mb-3 leading-relaxed">
                               💡 {quote.meaning}
                             </p>
                           )}
 
-                          {/* PAGE NUMBER - Only show if > 0 and not summary */}
                           {quote.page > 0 && !isSummary && (
                             <>
                               <div className="flex items-center gap-2 text-sm mb-3">
@@ -575,7 +596,6 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
                                 </span>
                               </div>
 
-                              {/* CONTEXT TOGGLE - Only for quotes/micro-details, not themes/ideas/summary */}
                               {quote.context && !isThemeOrIdea && (
                                 <button
                                   onClick={() => toggleContext(quote.id)}
@@ -599,7 +619,6 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
                         </div>
                       </div>
 
-                      {/* EXPANDED CONTEXT */}
                       {quote.expandedContext && quote.context && quote.page > 0 && !isThemeOrIdea && !isSummary && (
                         <div
                           className="p-4 rounded-xl bg-[#001F54]/20 border border-[#00D1FF]/10"
@@ -613,7 +632,6 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
                     </div>
                   ))}
 
-                  {/* FOLLOW-UP QUESTIONS */}
                   {followUpQuestions.length > 0 && (
                     <div className="pt-4 border-t border-[#00D1FF]/10">
                       <p
