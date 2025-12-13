@@ -17,6 +17,8 @@ const app = express();
 app.use(cors({
   origin: [
     'https://quote-quest-nine.vercel.app',
+    'https://www.quotequest.site',
+    'https://quotequest.site',
     'http://localhost:5173',
     'http://localhost:5174',
     'http://localhost:3000'
