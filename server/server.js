@@ -8,9 +8,14 @@ import * as pdfjsLib from "pdfjs-dist/build/pdf.mjs";
 
 dotenv.config();
 
+// ========== ENSURE UPLOADS FOLDER EXISTS ==========
+if (!fs.existsSync("uploads")) {
+  fs.mkdirSync("uploads");
+}
+
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 
 // ========== PDF.js WARNING SILENCER ==========
 pdfjsLib.GlobalWorkerOptions.standardFontDataUrl = "";
@@ -112,14 +117,12 @@ const MICRO_DETAIL_KEYWORDS = {
 function isMicroDetailQuestion(question) {
   const q = question.toLowerCase();
   
-  // Check all micro-detail keywords
   for (const keywords of Object.values(MICRO_DETAIL_KEYWORDS)) {
     if (keywords.some(kw => q.includes(kw))) {
       return true;
     }
   }
   
-  // Check for specific patterns that indicate micro-details
   const microPatterns = [
     /u kojem (dijelu|poglavlju|činu|cinu)/i,
     /koje? (boje?|predmet|lokacij|odijelo|haljin)/i,
@@ -147,8 +150,6 @@ async function extractPages(buffer) {
     })
     .promise;
 
-  const pages = [];
-
   const pagePromises = [];
   for (let i = 1; i <= pdf.numPages; i++) {
     pagePromises.push(
@@ -170,11 +171,10 @@ function createSentenceIndex(pages) {
   const index = [];
   
   pages.forEach((pageText, pageIdx) => {
-    // Split into sentences (improved regex)
     const sentences = pageText.split(/(?<=[.!?])\s+(?=[A-ZŠĐČĆŽ])/);
     
     sentences.forEach((sentence, sentIdx) => {
-      if (sentence.trim().length < 10) return; // Skip very short fragments
+      if (sentence.trim().length < 10) return;
       
       index.push({
         page: pageIdx + 1,
@@ -193,7 +193,6 @@ function preFilterSentences(sentenceIndex, question) {
   const keywords = extractKeywords(question);
   if (keywords.length === 0) return sentenceIndex;
   
-  // Find sentences containing ANY of the keywords
   const filtered = sentenceIndex.filter(item => {
     return keywords.some(kw => item.lowerText.includes(kw.toLowerCase()));
   });
@@ -203,10 +202,8 @@ function preFilterSentences(sentenceIndex, question) {
 
 /* ---------- Extract keywords from question ---------- */
 function extractKeywords(question) {
-  // Normalize: trim and lowercase
   const q = question.trim().toLowerCase();
   
-  // Expanded stop words for better filtering
   const stopWords = [
     "u", "i", "a", "ali", "ako", "je", "su", "sa", "se", "o", "na", "za",
     "od", "do", "po", "iz", "koji", "koja", "koje", "koje", "kakav", "kakva",
@@ -216,10 +213,8 @@ function extractKeywords(question) {
     "više", "vise", "manje", "samo", "već", "vec", "još", "jos", "čak", "cak"
   ];
   
-  // Remove punctuation and split
   const words = q.replace(/[?!.,;:()]/g, "").split(/\s+/);
   
-  // Filter out stop words and very short words, keep important content words
   return words.filter(w => w.length > 2 && !stopWords.includes(w));
 }
 
@@ -247,19 +242,16 @@ function createChunks(pages) {
 
 /* ---------- Create smaller chunks for micro-detail questions ---------- */
 function createMicroDetailChunks(pages, filteredSentences) {
-  // Group filtered sentences by page proximity
   const chunks = [];
-  const MICRO_CHUNK_SIZE = 5; // 5 pages per chunk for better precision
+  const MICRO_CHUNK_SIZE = 5;
   
   if (filteredSentences.length === 0) {
-    // Fallback to regular chunking
     return createChunks(pages).map(chunk => ({
       ...chunk,
       isMicroDetail: true
     }));
   }
   
-  // Get unique pages that contain relevant sentences
   const relevantPages = [...new Set(filteredSentences.map(s => s.page))].sort((a, b) => a - b);
   
   for (let i = 0; i < relevantPages.length; i += MICRO_CHUNK_SIZE) {
@@ -267,7 +259,6 @@ function createMicroDetailChunks(pages, filteredSentences) {
     const startPage = pageGroup[0];
     const endPage = pageGroup[pageGroup.length - 1];
     
-    // Extract text for these pages
     const chunkText = pageGroup
       .map(pageNum => `STRANICA ${pageNum}:\n${pages[pageNum - 1]}`)
       .join("\n\n----------------\n\n");
@@ -287,7 +278,6 @@ function createMicroDetailChunks(pages, filteredSentences) {
 
 /* ---------- INTELLIGENT QUESTION UNDERSTANDING ---------- */
 
-// Synonym and variation mappings for flexible understanding
 const QUESTION_PATTERNS = {
   characterization: [
     /karakterizacij/i,
@@ -310,7 +300,7 @@ const QUESTION_PATTERNS = {
     /kontrasti/i,
     /nabroj\s+kontraste/i,
     /daj\s+mi\s+kontraste/i,
-    /između.*i/i, // "između X i Y"
+    /između.*i/i,
     /vs\./i,
     /naspram/i
   ],
@@ -397,10 +387,8 @@ const QUESTION_PATTERNS = {
 function detectQuestionType(q) {
   const qLower = q.toLowerCase();
   
-  // Check each pattern category
   for (const [type, patterns] of Object.entries(QUESTION_PATTERNS)) {
     if (patterns.some(pattern => pattern.test(qLower))) {
-      // Special handling for combined theme+idea
       if (type === 'theme' && QUESTION_PATTERNS.idea.some(p => p.test(qLower))) {
         return 'theme-idea';
       }
@@ -408,12 +396,10 @@ function detectQuestionType(q) {
     }
   }
   
-  // Micro-detail detection (questions about specific details)
   if (isMicroDetailQuestion(qLower)) {
     return 'micro-detail';
   }
   
-  // Default to quotes for general questions
   return 'quotes';
 }
 
@@ -421,14 +407,12 @@ function detectQuestionType(q) {
 function detectMicroDetailCategory(question) {
   const q = question.toLowerCase().trim();
   
-  // Check each category's keywords
   for (const [category, keywords] of Object.entries(MICRO_DETAIL_KEYWORDS)) {
     if (keywords.some(kw => q.includes(kw))) {
       return category;
     }
   }
   
-  // Pattern-based detection for ambiguous cases
   if (/što|šta|sta.*(?:kupi|nosi|drži|drzi|koristi)/i.test(q)) return "object";
   if (/kako.*(?:obučen|obucen|odjeven|izgleda)/i.test(q)) return "clothing";
   if (/(?:gdje|gde).*(?:se nalazi|živi|zivi|ide)/i.test(q)) return "location";
@@ -439,7 +423,6 @@ function detectMicroDetailCategory(question) {
 
 /* ---------- Extract character name from question ---------- */
 function extractCharacterName(question) {
-  // Normalize question - trim whitespace and handle lowercase starts
   const q = question.trim();
   
   const match = q.match(/karakterizacija\s+(?:lika\s+)?(.+?)(?:\?|$)/i);
@@ -451,7 +434,6 @@ function extractCharacterName(question) {
 
 /* ---------- Word count helpers ---------- */
 function extractTargetWordForCount(q) {
-  // Normalize and trim
   q = q.trim();
   
   const quoted = q.match(/["""'„]([^"'""„]+)["""'„]/);
@@ -547,7 +529,6 @@ CHUNK INFO:
    ✅ Treat synonyms, paraphrases, and variations as same intent
    ✅ Examples: "kontrasti", "opreke", "suprotnosti" = all mean contrasts`;
 
-  // Task-specific instructions
   if (taskType === "theme" || taskType === "idea" || taskType === "theme-idea") {
     basePrompt += `
 
@@ -788,6 +769,7 @@ function getMicroDetailCategoryInstructions(category) {
     
     dialogue: `
    - element format: "Dijalog: <speaker>"
+   -   - element format: "Dijalog: <speaker>"
    - Example: "Dijalog: Torvaldove riječi ljutnje"
    - Extract exact words spoken
    - Include speaker identification`,
@@ -838,7 +820,7 @@ function generateFollowUpQuestions(taskType, question, results, category = null)
       questions.push(
         "Kako odjeća odražava karakter lika?",
         "Kako se stil oblačenja mijenja kroz priču?",
-        "Šta simbolizira ovaj dio garderoble?"
+        "Šta simbolizira ovaj dio garderobe?"
       );
     } else if (category === "mention") {
       questions.push(
@@ -857,7 +839,7 @@ function generateFollowUpQuestions(taskType, question, results, category = null)
     const charName = extractCharacterName(question) || "lika";
     questions.push(
       `Kako se ${charName} mijenja kroz priču?`,
-      `Koje odluke ${charName} najviše utječu na zaplet?`,
+      `Koje odluke ${charName} najviše utiču na zaplet?`,
       `Kako drugi likovi reaguju na ${charName}?`
     );
   } else if (taskType === "events") {
@@ -883,7 +865,6 @@ function deduplicateQuotes(allQuotes) {
   const unique = [];
 
   for (const quote of allQuotes) {
-    // Create key from text content (first 100 chars) and page
     const textKey = quote.text.toLowerCase().trim().substring(0, 100);
     const key = `${textKey}-${quote.page}`;
     
@@ -923,27 +904,25 @@ ${chunk.text}`;
         model: "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
+          { role: "user", content: userPrompt }
         ],
         temperature: 0.05,
-        max_tokens: MAX_TOKENS_PER_REQUEST,
+        max_tokens: MAX_TOKENS_PER_REQUEST
       },
       {
         headers: {
           Authorization: `Bearer ${process.env.TOGETHER_API_KEY}`,
-          "Content-Type": "application/json",
-        },
+          "Content-Type": "application/json"
+        }
       }
     );
 
-    const rawContent = response.data.choices[0].message.content.trim();
-    
-    let cleaned = rawContent;
-    if (cleaned.startsWith("```json")) {
-      cleaned = cleaned.replace(/```json\n?/g, "").replace(/```\n?/g, "");
-    } else if (cleaned.startsWith("```")) {
-      cleaned = cleaned.replace(/```\n?/g, "");
+    let cleaned = response.data.choices[0].message.content.trim();
+
+    if (cleaned.startsWith("```")) {
+      cleaned = cleaned.replace(/```json\n?|```\n?/g, "");
     }
+
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (jsonMatch) cleaned = jsonMatch[0];
 
@@ -955,34 +934,22 @@ ${chunk.text}`;
   }
 }
 
-/* ---------- Process chunks in parallel batches ---------- */
+/* ---------- Process chunks in parallel ---------- */
 async function processAllChunks(chunks, taskType, question, characterName, category) {
   const totalPages = chunks[chunks.length - 1].endPage;
   const allQuotes = [];
 
-  console.log(`Processing ${chunks.length} chunks in parallel batches of ${MAX_CONCURRENT_REQUESTS}...`);
-
   for (let i = 0; i < chunks.length; i += MAX_CONCURRENT_REQUESTS) {
     const batch = chunks.slice(i, i + MAX_CONCURRENT_REQUESTS);
-    console.log(`Processing batch ${Math.floor(i / MAX_CONCURRENT_REQUESTS) + 1}/${Math.ceil(chunks.length / MAX_CONCURRENT_REQUESTS)} (chunks ${i + 1}-${i + batch.length})`);
-    
-    const batchPromises = batch.map(chunk => 
-      processChunk(chunk, taskType, question, totalPages, characterName, category)
+    const results = await Promise.all(
+      batch.map(chunk =>
+        processChunk(chunk, taskType, question, totalPages, characterName, category)
+      )
     );
-
-    const batchResults = await Promise.all(batchPromises);
-    
-    for (const quotes of batchResults) {
-      allQuotes.push(...quotes);
-    }
+    results.forEach(r => allQuotes.push(...r));
   }
 
-  const uniqueQuotes = deduplicateQuotes(allQuotes);
-  uniqueQuotes.sort((a, b) => (a.page || 0) - (b.page || 0));
-
-  console.log(`Total quotes after deduplication: ${uniqueQuotes.length}`);
-
-  return uniqueQuotes;
+  return deduplicateQuotes(allQuotes).sort((a, b) => (a.page || 0) - (b.page || 0));
 }
 
 /* ---------- Format final response ---------- */
@@ -993,7 +960,7 @@ function formatFinalResponse(taskType, quotes, question, countMeta = null, categ
     page: typeof item.page === "number" ? item.page : 0,
     context: item.context || "",
     element: item.element || null,
-    meaning: item.meaning || null,
+    meaning: item.meaning || null
   }));
 
   const followUp = generateFollowUpQuestions(taskType, question, formattedQuotes, category);
@@ -1001,12 +968,10 @@ function formatFinalResponse(taskType, quotes, question, countMeta = null, categ
   const response = {
     type: taskType,
     quotes: formattedQuotes,
-    followUp,
+    followUp
   };
 
-  if (countMeta) {
-    response.meta = countMeta;
-  }
+  if (countMeta) response.meta = countMeta;
 
   return response;
 }
@@ -1018,115 +983,49 @@ app.post("/ask-pdf", upload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "Nema PDF fajla." });
     if (!question) return res.status(400).json({ error: "Nema pitanja." });
 
-    // Normalize question: trim whitespace and handle any case
     const normalizedQuestion = question.trim();
-    
     const taskType = detectQuestionType(normalizedQuestion);
-    const characterName = taskType === "characterization" ? extractCharacterName(normalizedQuestion) : null;
-    const category = taskType === "micro-detail" ? detectMicroDetailCategory(normalizedQuestion) : null;
+    const characterName = taskType === "characterization"
+      ? extractCharacterName(normalizedQuestion)
+      : null;
+    const category = taskType === "micro-detail"
+      ? detectMicroDetailCategory(normalizedQuestion)
+      : null;
 
-    console.log(`Question: "${normalizedQuestion}"`);
-    console.log(`Task type: ${taskType}`);
-    if (characterName) console.log(`Character: ${characterName}`);
-    if (category) console.log(`Micro-detail category: ${category}`);
-
-    const filePath = req.file.path;
-    const buffer = new Uint8Array(fs.readFileSync(filePath));
+    const buffer = new Uint8Array(fs.readFileSync(req.file.path));
     const pages = await extractPages(buffer);
-    fs.unlink(filePath, () => {});
+    fs.unlink(req.file.path, () => {});
 
-    console.log(`PDF extracted: ${pages.length} pages`);
-
-    // Handle count separately
-    if (taskType === "count") {
-      const chunks = createChunks(pages);
-      const word = extractTargetWordForCount(normalizedQuestion);
-      const countData = countWordOccurrencesInChunks(chunks, word);
-
-      if (countData.total === 0) {
-        return res.json({
-          type: "count",
-          meta: { word, total: 0, perPage: [] },
-          quotes: [],
-          followUp: [
-            `Zašto se riječ "${word}" ne pojavljuje u djelu?`,
-            "Koje alternative autor koristi?",
-            "Kako bi priča bila drugačija sa ovom riječju?"
-          ],
-        });
-      }
-
-      const exampleQuotes = countData.examples.slice(0, 5).map((ex, idx) => {
-        const sentences = ex.fullText.split(/[.!?]+/).filter(s => s.trim().length > 10);
-        const sentenceIndex = sentences.findIndex(s => s.includes(ex.sentence));
-        const contextStart = Math.max(0, sentenceIndex - 1);
-        const contextEnd = Math.min(sentences.length, sentenceIndex + 2);
-        const context = sentences.slice(contextStart, contextEnd).join(". ") + ".";
-
-        return {
-          id: `count-${idx}`,
-          element: `Ponavljanje riječi: ${word}`,
-          text: ex.sentence,
-          meaning: "",
-          page: ex.page,
-          context: context,
-        };
-      });
-
-      return res.json({
-        type: "count",
-        meta: { word, total: countData.total, perPage: countData.perPage },
-        quotes: exampleQuotes,
-        followUp: [
-          `Zašto autor često koristi riječ "${word}"?`,
-          `U kojim scenama se "${word}" najčešće pojavljuje?`,
-          `Kako "${word}" povezuje različite dijelove djela?`
-        ],
-      });
-    }
-
-    // Create chunks based on task type
     let chunks;
-    
     if (taskType === "micro-detail") {
-      // For micro-details, use intelligent pre-filtering
       const sentenceIndex = createSentenceIndex(pages);
       const filteredSentences = preFilterSentences(sentenceIndex, normalizedQuestion);
-      
-      console.log(`Sentence index created: ${sentenceIndex.length} sentences`);
-      console.log(`Pre-filtered to ${filteredSentences.length} relevant sentences`);
-      
       chunks = createMicroDetailChunks(pages, filteredSentences);
-      console.log(`Created ${chunks.length} micro-detail chunks`);
     } else {
-      // Regular chunking for other tasks
       chunks = createChunks(pages);
-      console.log(`Created ${chunks.length} regular chunks`);
     }
 
-    // Process all chunks
-    const allQuotes = await processAllChunks(chunks, taskType, normalizedQuestion, characterName, category);
+    const quotes = await processAllChunks(
+      chunks,
+      taskType,
+      normalizedQuestion,
+      characterName,
+      category
+    );
 
-    // Format and return response
-    const finalResponse = formatFinalResponse(taskType, allQuotes, normalizedQuestion, null, category);
-
-    console.log("=== FINAL RESPONSE ===");
-    console.log(`Type: ${finalResponse.type}`);
-    console.log(`Quotes: ${finalResponse.quotes.length}`);
-    console.log(`Follow-ups: ${finalResponse.followUp.length}`);
-
-    return res.json(finalResponse);
-
+    return res.json(
+      formatFinalResponse(taskType, quotes, normalizedQuestion, null, category)
+    );
   } catch (err) {
-    console.error("=== SERVER ERROR ===");
-    console.error("Error:", err.message);
-    console.error("Stack:", err.stack);
+    console.error(err);
     return res.status(500).json({
-      error: "Greška pri obradi PDF-a ili AI odgovora.",
+      error: "Greška pri obradi PDF-a ili AI odgovora."
     });
   }
 });
 
-app.listen(5000, () =>
-  console.log("✅ Server radi na portu 5000 - MICRO-DETAIL MODE ENABLED")
+/* ---------- RENDER-SAFE PORT ---------- */
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () =>
+  console.log(`✅ Server radi na portu ${PORT}`)
 );
