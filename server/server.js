@@ -912,9 +912,9 @@ ${chunk.text}`;
 
   try {
     const response = await axios.post(
-      "https://api.together.ai/v1/chat/completions",
+      "https://api.groq.com/openai/v1/chat/completions",
       {
-        model: "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+        model: "llama-3.1-70b-versatile",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
@@ -924,7 +924,7 @@ ${chunk.text}`;
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.TOGETHER_API_KEY}`,
+          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
           "Content-Type": "application/json"
         }
       }
