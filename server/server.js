@@ -72,9 +72,9 @@ try {
 const upload = multer({ dest: "uploads/" });
 
 /* ---------- CHUNK SIZE CONFIGURATION ---------- */
-const PAGES_PER_CHUNK = 10;
+const PAGES_PER_CHUNK = 8;
 const MAX_TOKENS_PER_REQUEST = 2000;
-const MAX_CONCURRENT_REQUESTS = 5;
+const MAX_CONCURRENT_REQUESTS = 4;
 
 /* ---------- MICRO-DETAIL KEYWORDS ---------- */
 const MICRO_DETAIL_KEYWORDS = {
@@ -492,216 +492,175 @@ function countWordOccurrencesInChunks(chunks, word) {
 }
 
 /* ---------- ENHANCED SYSTEM PROMPT ---------- */
+/* ---------- ENHANCED SYSTEM PROMPT ---------- */
 function getSystemPrompt(totalPages, chunkInfo, taskType, category = null) {
-  let basePrompt = `You are QuoteQuest AI — an ULTRA-PRECISE literature analysis engine that understands EVERY possible user question variation.
+  let basePrompt = `QuoteQuest AI - ultra-precise literature analysis engine.
 
-CRITICAL: You must ground ALL answers ONLY in the provided PDF text. NEVER invent information.
+CHUNK CONTEXT: Analyzing pages ${chunkInfo.startPage}-${chunkInfo.endPage} (total book: ${totalPages} pages)
 
-You are analyzing a CHUNK of a larger book.
-
-CHUNK INFO:
-- This chunk contains pages ${chunkInfo.startPage} to ${chunkInfo.endPage}
-- Total book has ${totalPages} pages
-- You are analyzing part of the complete work
-
-═══════════════════════════════════════════════════════════════════
-🔴 ABSOLUTE RULES 🔴
-═══════════════════════════════════════════════════════════════════
-
-1. BOSNIAN TITLES ONLY
-   ✅ "element" field MUST be in Bosnian
-   ✅ Examples: "Osobina: Hrabrost", "Tema: Sloboda", "Kontrast: Nora ↔ Torvald"
-   ❌ NEVER use English: "Trait", "Theme", "Contrast"
-   ❌ NEVER leave "element" empty or null
+CORE RULES:
+1. BOSNIAN TITLES MANDATORY
+   - "element" field MUST be Bosnian
+   - Examples: "Osobina: Hrabrost", "Tema: Sloboda", "Kontrast: Nora ↔ Torvald"
+   - NEVER English: "Trait", "Theme", "Contrast"
+   - NEVER empty element field
 
 2. EXTRACT ONLY FROM PROVIDED TEXT
-   ✅ Extract quotes ONLY from the chunk provided
-   ✅ Use page numbers EXACTLY as marked (STRANICA X:)
-   ✅ DO NOT invent or hallucinate content
-   ✅ If information is NOT in this chunk, DO NOT include it
-   ✅ If you cannot find the answer, do not make one up
+   - Use EXACT page numbers from "STRANICA X:" markers
+   - DO NOT invent or hallucinate content
+   - If information NOT in this chunk, DO NOT include it
 
-3. NEVER REPEAT QUOTES
-   ✅ Each "text" field must be UNIQUE
-   ✅ DO NOT use the same sentence twice
-   ✅ DO NOT use paraphrased versions of the same content
+3. NO DUPLICATE QUOTES
+   - Each "text" field MUST be unique
+   - Never use same sentence twice
+   - No paraphrased versions of same content
 
-4. ACCURATE CONTEXT EXTRACTION
-   ✅ Extract 3-8 sentences surrounding the quote
-   ✅ Include sentences BEFORE and AFTER the quote
-   ✅ The context must be the ACTUAL paragraph from the book
-   ❌ DO NOT just repeat the quote
+4. ACCURATE CONTEXT
+   - Extract 3-8 sentences surrounding the quote
+   - Include sentences BEFORE and AFTER
+   - Must be ACTUAL paragraph from book
 
-5. ACCURATE PAGE NUMBERS
-   ✅ Use the exact page from "STRANICA X:" markers
-   ✅ Never guess page numbers
-   ✅ If page is unclear, use 0
-
-6. UNDERSTAND ALL QUESTION VARIATIONS
-   ✅ User may ask the same thing in many different ways
-   ✅ Treat synonyms, paraphrases, and variations as same intent
-   ✅ Examples: "kontrasti", "opreke", "suprotnosti" = all mean contrasts`;
+5. UNDERSTAND QUESTION VARIATIONS
+   - User may ask same thing in different ways
+   - Treat synonyms as same intent
+   - Examples: "kontrasti", "opreke", "suprotnosti" = all mean contrasts
+`;
 
   if (taskType === "theme" || taskType === "idea" || taskType === "theme-idea") {
     basePrompt += `
+THEME/IDEA EXTRACTION MODE:
 
-═══════════════════════════════════════════════════════════════════
-🔥 THEME/IDEA EXTRACTION MODE 🔥
-═══════════════════════════════════════════════════════════════════
+ELEMENT FORMAT:
+- Theme: "Tema: [name of theme]"
+- Idea: "Ideja: [name of idea]"
+- Example: "Tema: Sloboda i društveni pritisak"
+- Example: "Ideja: Sukob individualnosti i društvenih normi"
 
-SPECIAL RULES FOR THEMES AND IDEAS:
+TEXT FIELD:
+- For themes/ideas: text field should be EMPTY ""
+- Main content goes in "meaning" field
 
-1. ELEMENT FORMAT:
-   ✅ For theme: "Tema: [name of theme]"
-   ✅ For idea: "Ideja: [name of idea]"
-   ✅ Example: "Tema: Sloboda i društveni pritisak"
-   ✅ Example: "Ideja: Sukob između individualnosti i društvenih normi"
+MEANING FIELD (CRITICAL):
+- Start with SHORT formulation (1 sentence)
+- Then detailed explanation (3-5 sentences)
+- Explain ESSENCE of theme/idea
+- Provide BROADER CONTEXT of how it manifests
+- Explain SIGNIFICANCE to overall narrative
+- Connect to CHARACTER DEVELOPMENT or PLOT
+- DO NOT just quote - ANALYZE and EXPLAIN
 
-2. TEXT FIELD:
-   - For themes/ideas, the "text" field should be EMPTY ("")
-   - NO quotes needed unless user explicitly asks
-   - The main content goes in the "meaning" field
-
-3. MEANING FIELD (MOST IMPORTANT):
-   ✅ Start with SHORT formulation (1 sentence)
-   ✅ Then provide detailed explanation (3-5 sentences)
-   ✅ Explain the ESSENCE of the theme/idea
-   ✅ Provide BROADER CONTEXT of how it manifests in the work
-   ✅ Explain its SIGNIFICANCE to the overall narrative
-   ✅ Connect it to CHARACTER DEVELOPMENT or PLOT
-   ✅ DO NOT just quote - ANALYZE and EXPLAIN
-
-4. EXAMPLE FORMAT:
-   {
-     "element": "Tema: Sloboda",
-     "text": "",
-     "meaning": "Tema slobode prožima cijelo djelo kroz Norin sukob sa društvenim konvencijama. Ona se bori protiv uloge koju joj nameće patrijarhat i traži svoju autentičnost. Kroz njen razvoj, autor pokazuje kako lažna sloboda u braku vodi do unutrašnje praznine i gubitka identiteta. Njena konačna odluka da napusti porodicu predstavlja vrhunac ovog tematskog razvoja.",
-     "page": 45,
-     "context": "..."
-   }`;
+Example:
+{
+  "element": "Tema: Sloboda",
+  "text": "",
+  "meaning": "Tema slobode prožima cijelo djelo kroz Norin sukob sa društvenim konvencijama. Ona se bori protiv uloge koju joj nameće patrijarhat i traži svoju autentičnost. Kroz njen razvoj, autor pokazuje kako lažna sloboda u braku vodi do unutrašnje praznine i gubitka identiteta. Njena konačna odluka da napusti porodicu predstavlja vrhunac ovog tematskog razvoja.",
+  "page": 45,
+  "context": "..."
+}
+`;
   }
 
   if (taskType === "contrast") {
     basePrompt += `
+CONTRAST EXTRACTION MODE:
 
-═══════════════════════════════════════════════════════════════════
-🔥 CONTRAST EXTRACTION MODE 🔥
-═══════════════════════════════════════════════════════════════════
+ELEMENT FORMAT:
+- "Kontrast: [A ↔ B]"
+- Example: "Kontrast: Nora (sloboda) ↔ Torvald (kontrola)"
+- Example: "Kontrast: Javni ugled ↔ Privatna moralnost"
 
-You must identify CONTRASTS and OPPOSITIONS in the work.
-User may ask: "kontrasti", "opreke", "suprotnosti", "razlike", "poređenje" - all mean the same.
+WHAT TO LOOK FOR:
+- Opposing characters (personality, values, goals)
+- Moral dilemmas (duty vs. desire)
+- Symbolic contrasts (light vs. darkness)
+- Social contrasts (rich vs. poor, freedom vs. oppression)
+- Emotional contrasts (happiness vs. despair)
+- Setting contrasts (public vs. private spaces)
 
-1. ELEMENT FORMAT:
-   ✅ "Kontrast: [A ↔ B]"
-   ✅ Example: "Kontrast: Nora (sloboda) ↔ Torvald (kontrola)"
-   ✅ Example: "Kontrast: Javni ugled ↔ Privatna moralnost"
+TEXT FIELD:
+- Include quote that illustrates the contrast
+- Can combine quotes from both sides if needed
 
-2. WHAT TO LOOK FOR:
-   - Opposing characters (personality, values, goals)
-   - Moral dilemmas (duty vs. desire)
-   - Symbolic contrasts (light vs. darkness)
-   - Social contrasts (rich vs. poor, freedom vs. oppression)
-   - Emotional contrasts (happiness vs. despair)
-   - Setting contrasts (public vs. private spaces)
+MEANING FIELD:
+- Explain BOTH sides of the contrast
+- Show how they interact or conflict
+- Explain significance to overall work
+- Connect to themes and character development
 
-3. TEXT FIELD:
-   ✅ Include a quote that illustrates the contrast
-   ✅ Can combine quotes from both sides if needed
-
-4. MEANING FIELD:
-   ✅ Explain BOTH sides of the contrast
-   ✅ Show how they interact or conflict
-   ✅ Explain significance to the overall work
-   ✅ Connect to themes and character development
-
-5. EXAMPLE:
-   {
-     "element": "Kontrast: Javni ugled ↔ Privatna moralnost",
-     "text": "Torvald kaže: 'U našoj kući mora biti sve kako treba.' Ali Nora skriva tajnu falsifikovanja potpisa.",
-     "meaning": "Torvald je opsjednut javnim ugledom i društvenim konvencijama, dok Nora živi u tajnosti svog prijestupa. Ovaj kontrast razotkriva licemjerje buržoaskog društva gdje površina je važnija od istine. Njihov brak funkcionira samo dok se održava fasada.",
-     "page": 23,
-     "context": "..."
-   }`;
+Example:
+{
+  "element": "Kontrast: Javni ugled ↔ Privatna moralnost",
+  "text": "Torvald kaže: 'U našoj kući mora biti sve kako treba.' Ali Nora skriva tajnu falsifikovanja potpisa.",
+  "meaning": "Torvald je opsjednut javnim ugledom i društvenim konvencijama, dok Nora živi u tajnosti svog prijestupa. Ovaj kontrast razotkriva licemjerje buržoaskog društva gdje površina je važnija od istine. Njihov brak funkcionira samo dok se održava fasada.",
+  "page": 23,
+  "context": "..."
+}
+`;
   }
 
   if (taskType === "micro-detail") {
     basePrompt += `
+MICRO-DETAIL EXTRACTION MODE (Category: ${category || "general"}):
 
-═══════════════════════════════════════════════════════════════════
-🔥 MICRO-DETAIL EXTRACTION MODE 🔥
-═══════════════════════════════════════════════════════════════════
+EXHAUSTIVE EXTRACTION:
+- Find ALL sentences that answer the question
+- Do NOT summarize or generalize
+- Extract EXACT text as written
+- If something appears 10 times, include all 10 occurrences
+- Chronological order by page number
 
-You are in MICRO-DETAIL mode for answering specific factual questions.
+${getMicroDetailCategoryInstructions(category)}
 
-1. EXTRACT EVERY SINGLE MENTION
-   ✅ Find ALL sentences that answer the question
-   ✅ Do not summarize or generalize
-   ✅ Extract the EXACT text as written
-   ✅ If something appears multiple times, include all occurrences
+TEXT FIELD:
+- Must contain EXACT quote answering the question
+- Full sentence or passage from book
+- If embedded in dialogue, include speaker
 
-2. ELEMENT FORMAT (CATEGORY: ${category || "general"}):
-   ${getMicroDetailCategoryInstructions(category)}
+MEANING FIELD:
+- Explain HOW this quote answers the specific question
+- Be precise about what detail it provides
+- Example: "Opisuje boju haljine koju Nora nosi u prvom činu"
+- Provide broader context if relevant
 
-3. BE EXHAUSTIVE
-   ✅ If something is mentioned 10 times, extract all 10
-   ✅ Include even small descriptive details
-   ✅ Chronological order by page number
-
-4. TEXT FIELD:
-   ✅ Must contain the EXACT quote that answers the question
-   ✅ Full sentence or passage from the book
-   ✅ If answer is embedded in dialogue, include speaker
-
-5. MEANING FIELD:
-   ✅ Explain HOW this quote answers the specific question
-   ✅ Be precise about what detail it provides
-   ✅ Example: "Opisuje boju haljine koju Nora nosi u prvom činu"
-   ✅ Provide broader context if relevant
-
-6. IF ANSWER NOT FOUND:
-   - If the detail is NOT mentioned in this chunk, return empty array
-   - DO NOT invent or assume information`;
+IF ANSWER NOT FOUND:
+- If detail NOT mentioned in this chunk, return empty array
+- DO NOT invent or assume information
+`;
   }
 
   if (taskType === "characterization") {
     basePrompt += `
+CHARACTERIZATION MODE:
 
-═══════════════════════════════════════════════════════════════════
-🔥 CHARACTERIZATION MODE 🔥
-═══════════════════════════════════════════════════════════════════
+ELEMENT FORMAT:
+- "Osobina: [adjective trait]"
+- Example: "Osobina: Hladnoća"
+- Example: "Osobina: Lukavstvo"
+- Example: "Osobina: Naivnost"
+- NEVER: "Osobina: Nora" (name, not trait)
+- NEVER: "Osobina: Protagonist" (role, not trait)
 
-1. ELEMENT FORMAT:
-   ✅ "Osobina: [adjective trait]"
-   ✅ Example: "Osobina: Hladnoća"
-   ✅ Example: "Osobina: Lukavstvo"
-   ✅ Example: "Osobina: Naivnost"
-   ❌ NEVER: "Osobina: Nora" (name, not trait)
-   ❌ NEVER: "Osobina: Protagonist" (role, not trait)
+TEXT FIELD:
+- Quote that demonstrates this trait
+- Can be dialogue or narrative description
+- Show, don't just tell
 
-2. TEXT FIELD:
-   ✅ Quote that demonstrates this trait
-   ✅ Can be dialogue or narrative description
-   ✅ Show, don't just tell
+MEANING FIELD:
+- Explain how this quote shows the trait
+- Connect to character development
+- Provide psychological insight
+- Explain significance in story
 
-3. MEANING FIELD:
-   ✅ Explain how this quote shows the trait
-   ✅ Connect to character development
-   ✅ Provide psychological insight
-   ✅ Explain significance in story
-
-4. EXTRACT 5-10 TRAITS:
-   - Personality traits
-   - Moral qualities
-   - Behavioral patterns
-   - Psychological characteristics`;
+EXTRACT 5-10 TRAITS:
+- Personality traits
+- Moral qualities
+- Behavioral patterns
+- Psychological characteristics
+`;
   }
 
   basePrompt += `
-
-═══════════════════════════════════════════════════════════════════
-📋 OUTPUT FORMAT
-═══════════════════════════════════════════════════════════════════
-
+OUTPUT FORMAT:
 {
   "type": "${taskType}",
   "quotes": [
@@ -716,18 +675,15 @@ You are in MICRO-DETAIL mode for answering specific factual questions.
   ]
 }
 
-═══════════════════════════════════════════════════════════════════
-CRITICAL REMINDERS:
-═══════════════════════════════════════════════════════════════════
-
+FINAL REMINDERS:
 - ALL "element" fields MUST be in BOSNIAN
 - NEVER use English words in "element"
 - NEVER leave "element" empty
-- For themes/ideas: "text" is empty, focus on "meaning" field with deep analysis
-- For contrasts: identify oppositions and explain their significance
+- For themes/ideas: "text" is empty, focus on "meaning" field
+- For contrasts: identify oppositions and explain significance
 - For micro-details: extract EXACT text with full context
 - For characterization: traits must be ADJECTIVES, not names
-- NEVER invent information not in the text
+- NEVER invent information not in text
 - If answer not in chunk, return empty array
 
 Return ONLY valid JSON. NO markdown. NO explanations.`;
@@ -739,65 +695,64 @@ Return ONLY valid JSON. NO markdown. NO explanations.`;
 function getMicroDetailCategoryInstructions(category) {
   const instructions = {
     location: `
-   - element format: "Lokacija: <place name>"
-   - Example: "Lokacija: Helmerin salon"
-   - Extract mentions of rooms, buildings, streets, cities
-   - Include descriptions of these locations`,
+ELEMENT FORMAT: "Lokacija: <place name>"
+Example: "Lokacija: Helmerin salon"
+Extract mentions of: rooms, buildings, streets, cities
+Include descriptions of these locations`,
     
     object: `
-   - element format: "Predmet: <object name>"
-   - Example: "Predmet: Prsten koji je Nora dobila"
-   - Extract mentions of items, tools, possessions
-   - Include what characters do with these objects`,
+ELEMENT FORMAT: "Predmet: <object name>"
+Example: "Predmet: Prsten koji je Nora dobila"
+Extract mentions of: items, tools, possessions
+Include what characters do with these objects`,
     
     clothing: `
-   - element format: "Odjeća: <description>"
-   - Example: "Odjeća: Norina haljina u prvom činu"
-   - Extract color, style, type of clothing
-   - Include all appearance details`,
+ELEMENT FORMAT: "Odjeća: <description>"
+Example: "Odjeća: Norina haljina u prvom činu"
+Extract: color, style, type of clothing
+Include all appearance details`,
     
     food: `
-   - element format: "Hrana/Piće: <item>"
-   - Example: "Hrana/Piće: Šampanjac na zabavi"
-   - Extract mentions of eating, drinking
-   - Include context of meals and gatherings`,
+ELEMENT FORMAT: "Hrana/Piće: <item>"
+Example: "Hrana/Piće: Šampanjac na zabavi"
+Extract mentions of: eating, drinking
+Include context of meals and gatherings`,
     
     appearance: `
-   - element format: "Detalj: <feature>"
-   - Example: "Detalj: Florentinova kosa"
-   - Extract physical descriptions
-   - Include emotional state if described`,
+ELEMENT FORMAT: "Detalj: <feature>"
+Example: "Detalj: Florentinova kosa"
+Extract: physical descriptions
+Include emotional state if described`,
     
     mention: `
-   - element format: "Spominjanje: <what is mentioned>"
-   - Example: "Spominjanje: Prvo spominjanje Krogstada"
-   - Extract first mentions or all mentions as requested
-   - Note the context of each mention`,
+ELEMENT FORMAT: "Spominjanje: <what is mentioned>"
+Example: "Spominjanje: Prvo spominjanje Krogstada"
+Extract: first mentions or all mentions as requested
+Note the context of each mention`,
     
     action: `
-   - element format: "Radnja: <action>"
-   - Example: "Radnja: Norin odlazak iz kuće"
-   - Extract sequence of events
-   - Include who does what and when`,
+ELEMENT FORMAT: "Radnja: <action>"
+Example: "Radnja: Norin odlazak iz kuće"
+Extract: sequence of events
+Include who does what and when`,
     
     dialogue: `
-   - element format: "Dijalog: <speaker>"
-   -   - element format: "Dijalog: <speaker>"
-   - Example: "Dijalog: Torvaldove riječi ljutnje"
-   - Extract exact words spoken
-   - Include speaker identification`,
+ELEMENT FORMAT: "Dijalog: <speaker>"
+Example: "Dijalog: Torvaldove riječi ljutnje"
+Extract: exact words spoken
+Include speaker identification`,
     
     time: `
-   - element format: "Vrijeme: <when>"
-   - Example: "Vrijeme: Božićno jutro"
-   - Extract temporal markers
-   - Include time of day, season, duration`
+ELEMENT FORMAT: "Vrijeme: <when>"
+Example: "Vrijeme: Božićno jutro"
+Extract: temporal markers
+Include time of day, season, duration`
   };
   
   return instructions[category] || `
-   - element format: "Detalj: <description>"
-   - Example: "Detalj: Starost Florentina"
-   - Extract exactly what the question asks for`;
+ELEMENT FORMAT: "Detalj: <description>"
+Example: "Detalj: Starost Florentina"
+Extract exactly what the question asks for`;
 }
 
 /* ---------- Generate follow-up questions ---------- */
