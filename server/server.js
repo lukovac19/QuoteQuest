@@ -484,11 +484,14 @@ const QUESTION_PATTERNS = {
   ],
   
   motif: [
-    /motiv/i,
-    /ponavlj/i,
-    /recurring/i,
-    /često\s+se\s+pojavljuje/i,
-    /često\s+spominje/i
+  /\bmotivi\b/i,
+  /\bmotiv\b/i,
+  /ponavljajući\s+motiv/i,
+  /ponavljaju[ćc]i\s+element/i,
+  /koji\s+se\s+motiv/i,
+  /navedi\s+motivi/i,
+  /izdvoji\s+motivi/i,
+  /motivi\s+u\s+djelu/i
   ],
   
   relation: [
