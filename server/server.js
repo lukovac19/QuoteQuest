@@ -72,8 +72,8 @@ try {
 const upload = multer({ dest: "uploads/" });
 
 /* ---------- CHUNK SIZE CONFIGURATION ---------- */
-const PAGES_PER_CHUNK = 15;
-const MAX_TOKENS_PER_REQUEST = 3500;
+const PAGES_PER_CHUNK = 10;
+const MAX_TOKENS_PER_REQUEST = 2000;
 const MAX_CONCURRENT_REQUESTS = 5;
 
 /* ---------- MICRO-DETAIL KEYWORDS ---------- */
@@ -910,6 +910,15 @@ IMPORTANT: Extract EVERY sentence that answers the user's question. Be exhaustiv
   userPrompt += `\n\nPDF TEXT (CHUNK):
 ${chunk.text}`;
 
+  // ✅ DEBUGGING - vidi šta šalješ
+  console.log('=== GROQ REQUEST ===');
+  console.log('Chunk pages:', chunk.startPage, '-', chunk.endPage);
+  console.log('Prompt lengths:', {
+    system: systemPrompt.length,
+    user: userPrompt.length,
+    totalEstimate: Math.ceil((systemPrompt.length + userPrompt.length) / 4)
+  });
+
   try {
     const response = await axios.post(
       "https://api.groq.com/openai/v1/chat/completions",
@@ -942,7 +951,24 @@ ${chunk.text}`;
     const aiJson = JSON.parse(cleaned);
     return aiJson.quotes || [];
   } catch (error) {
-    console.error(`Error processing chunk ${chunk.startPage}-${chunk.endPage}:`, error.message);
+
+    // ✅ DETALJNO LOGOVANJE
+
+    console.error('=== GROQ ERROR ===');
+    console.error(`Chunk ${chunk.startPage}-${chunk.endPage}:`, error.message);
+
+    if (error.response) {
+      console.error('Status:', error.response.status);
+      console.error('Response:', JSON.stringify(error.response.data, null, 2));
+      console.error('Headers:', error.response.headers);
+    }
+
+    if (error.config) {
+      console.error('Request URL:', error.config.url);
+      console.error('API Key exists:', !!error.config.headers?.Authorization);
+      console.error('API Key preview:', error.config.headers?.Authorization?.substring(0, 25) + '...');
+    }
+
     return [];
   }
 }
