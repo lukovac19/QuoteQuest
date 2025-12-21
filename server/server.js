@@ -72,9 +72,142 @@ try {
 const upload = multer({ dest: "uploads/" });
 
 /* ---------- CHUNK SIZE CONFIGURATION ---------- */
-const PAGES_PER_CHUNK = 8;
-const MAX_TOKENS_PER_REQUEST = 2000;
-const MAX_CONCURRENT_REQUESTS = 4;
+/* ---------- CHUNK SIZE CONFIGURATION ---------- */
+const PAGES_PER_CHUNK = 6;  // ✅ SMANJENO (bilo 8)
+const MAX_TOKENS_PER_REQUEST = 1500;  // ✅ SMANJENO (bilo 2000)
+const MAX_CONCURRENT_REQUESTS = 2;  // ✅ KRITIČNO - samo 2 odjednom!
+
+/* ---------- RETRY HELPER WITH EXPONENTIAL BACKOFF ---------- */
+async function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function retryWithBackoff(fn, maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      // Ako je 429 (rate limit), čekaj i pokušaj ponovo
+      if (error.response?.status === 429) {
+        const retryAfter = parseInt(error.response.headers['retry-after']) || 30;
+        console.log(`Rate limit hit, waiting ${retryAfter}s before retry ${attempt + 1}/${maxRetries}...`);
+        
+        if (attempt < maxRetries - 1) {
+          await sleep((retryAfter + 5) * 1000); // Dodaj 5s buffer
+          continue;
+        }
+      }
+      throw error;
+    }
+  }
+}
+
+/* ---------- Process single chunk with retry ---------- */
+async function processChunk(chunk, taskType, question, totalPages, characterName, category) {
+  const systemPrompt = getSystemPrompt(totalPages, chunk, taskType, category);
+  
+  let userPrompt = `taskType: ${taskType}
+userQuestion: ${question}`;
+
+  if (characterName) {
+    userPrompt += `\nCHARACTER TO ANALYZE: ${characterName}
+IMPORTANT: Extract traits ONLY for ${characterName}. Ignore other characters.`;
+  }
+
+  if (taskType === "micro-detail") {
+    userPrompt += `\n\nMICRO-DETAIL CATEGORY: ${category}
+IMPORTANT: Extract EVERY sentence that answers the user's question. Be exhaustive, not selective.`;
+  }
+
+  userPrompt += `\n\nPDF TEXT (CHUNK):
+${chunk.text}`;
+
+  console.log('=== GROQ REQUEST ===');
+  console.log('Chunk pages:', chunk.startPage, '-', chunk.endPage);
+  console.log('Task type:', taskType);
+  console.log('Prompt lengths:', {
+    system: systemPrompt.length,
+    user: userPrompt.length,
+    totalEstimate: Math.ceil((systemPrompt.length + userPrompt.length) / 4)
+  });
+
+  const makeRequest = async () => {
+    const response = await axios.post(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        temperature: 0.05,
+        max_tokens: MAX_TOKENS_PER_REQUEST
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+    return response;
+  };
+
+  try {
+    // ✅ Retry sa backoff-om
+    const response = await retryWithBackoff(makeRequest, 3);
+
+    let cleaned = response.data.choices[0].message.content.trim();
+
+    if (cleaned.startsWith("```")) {
+      cleaned = cleaned.replace(/```json\n?|```\n?/g, "");
+    }
+
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (jsonMatch) cleaned = jsonMatch[0];
+
+    const aiJson = JSON.parse(cleaned);
+    return aiJson.quotes || [];
+  } catch (error) {
+    console.error('=== GROQ ERROR ===');
+    console.error(`Chunk ${chunk.startPage}-${chunk.endPage}:`, error.message);
+    
+    if (error.response) {
+      console.error('Status:', error.response.status);
+      console.error('Response:', JSON.stringify(error.response.data, null, 2));
+    }
+    
+    return [];
+  }
+}
+
+/* ---------- Process chunks with delay between batches ---------- */
+async function processAllChunks(chunks, taskType, question, characterName, category) {
+  const totalPages = chunks[chunks.length - 1].endPage;
+  const allQuotes = [];
+
+  for (let i = 0; i < chunks.length; i += MAX_CONCURRENT_REQUESTS) {
+    const batch = chunks.slice(i, i + MAX_CONCURRENT_REQUESTS);
+    
+    console.log(`Processing batch ${Math.floor(i / MAX_CONCURRENT_REQUESTS) + 1}/${Math.ceil(chunks.length / MAX_CONCURRENT_REQUESTS)}`);
+    
+    const results = await Promise.all(
+      batch.map(chunk =>
+        processChunk(chunk, taskType, question, totalPages, characterName, category)
+      )
+    );
+    
+    results.forEach(r => allQuotes.push(...r));
+    
+    // ✅ Pauza između batch-eva da se rate limit ne premaši
+    if (i + MAX_CONCURRENT_REQUESTS < chunks.length) {
+      console.log('Waiting 10s before next batch to respect rate limits...');
+      await sleep(10000); // 10 sekundi pauze
+    }
+  }
+
+  return deduplicateQuotes(allQuotes).sort((a, b) => (a.page || 0) - (b.page || 0));
+}
 
 /* ---------- MICRO-DETAIL KEYWORDS ---------- */
 const MICRO_DETAIL_KEYWORDS = {
@@ -559,6 +692,59 @@ Example:
 }
 `;
   }
+  // ✅ DODAJ OVO U getSystemPrompt funkciju, POSLIJE contrast bloka, PRIJE micro-detail bloka
+
+  if (taskType === "motif") {
+    basePrompt += `
+MOTIF EXTRACTION MODE:
+
+ELEMENT FORMAT:
+- "Motiv: [name of motif]"
+- Example: "Motiv: Lutka"
+- Example: "Motiv: Novac i dug"
+- Example: "Motiv: Ples tarantele"
+
+WHAT IS A MOTIF:
+- Recurring element (object, action, phrase, image) throughout the work
+- Appears multiple times with symbolic significance
+- Contributes to theme or atmosphere
+- Can be concrete (object) or abstract (idea)
+
+WHAT TO LOOK FOR:
+- Objects mentioned repeatedly (letters, doors, tree, costume)
+- Actions repeated by characters (lying, dancing, borrowing)
+- Phrases or words appearing multiple times
+- Images or descriptions that recur
+- Symbolic elements with layered meaning
+
+TEXT FIELD:
+- Include 1-2 representative quotes showing the motif
+- Choose most significant occurrences
+- Can combine quotes from different scenes if illustrative
+
+MEANING FIELD:
+- Explain WHAT the motif is (first mention what it literally is)
+- Describe HOW it recurs throughout the work
+- Analyze WHY it's significant (symbolic meaning)
+- Connect to themes and character development
+- Explain its function in the overall narrative
+
+Example:
+{
+  "element": "Motiv: Lutka",
+  "text": "Torvald kaže: 'Moja mala vjeverica.' Kasnije Nora odgovara: 'Nisam više tvoja lutka.'",
+  "meaning": "Motiv lutke se provlači kroz cijelo djelo kroz Torvaldove nadimke za Noru (vjeverica, ptica, lutka). On je tretira kao igračku bez svoje volje. Ovaj motiv simbolizuje Norin nedostatak autonomije u braku i patrijarhalnu kontrolu. U kulminaciji, Nora odbacuje ulogu lutke, što predstavlja njen duhovni preporod i borbu za identitet.",
+  "page": 12,
+  "context": "..."
+}
+
+IMPORTANT:
+- Extract 3-8 major motifs
+- Focus on RECURRING elements, not one-time occurrences
+- Each motif must appear at least 2-3 times in the work
+- Explain both literal and symbolic significance
+`;
+  }
 
   if (taskType === "contrast") {
     basePrompt += `
@@ -756,14 +942,28 @@ Extract exactly what the question asks for`;
 }
 
 /* ---------- Generate follow-up questions ---------- */
+/* ---------- Generate follow-up questions ---------- */
 function generateFollowUpQuestions(taskType, question, results, category = null) {
   const questions = [];
 
-  if (taskType === "contrast") {
+  if (taskType === "characterization") {
+    const charName = extractCharacterName(question) || "lika";
+    questions.push(
+      `Kako se ${charName} mijenja kroz priču?`,
+      `Koje odluke ${charName} najviše utiču na zaplet?`,
+      `Kako drugi likovi reaguju na ${charName}?`
+    );
+  } else if (taskType === "contrast") {
     questions.push(
       "Kako se ovaj kontrast razvija kroz djelo?",
       "Koji drugi kontrasti su prisutni u djelu?",
       "Kako kontrasti doprinose centralnoj temi?"
+    );
+  } else if (taskType === "motif") {
+    questions.push(
+      "Kako se ovaj motiv razvija kroz djelo?",
+      "Koji drugi motivi su prisutni u djelu?",
+      "Kakvu simboliku ovaj motiv nosi?"
     );
   } else if (taskType === "theme" || taskType === "theme-idea") {
     questions.push(
@@ -776,6 +976,18 @@ function generateFollowUpQuestions(taskType, question, results, category = null)
       "Kako autor razvija ovu ideju kroz djelo?",
       "Koji likovi najbolje predstavljaju ovu ideju?",
       "Kako se ideja povezuje s društvenim kontekstom?"
+    );
+  } else if (taskType === "symbolism") {
+    questions.push(
+      "Koji još simboli postoje u djelu?",
+      "Kako se simbolika povezuje s temama?",
+      "Kako autor koristi simbole za dublju poruku?"
+    );
+  } else if (taskType === "relation") {
+    questions.push(
+      "Kako se ovaj odnos razvija kroz priču?",
+      "Koji događaji najviše utiču na odnos?",
+      "Kako odnos odražava šire teme?"
     );
   } else if (taskType === "micro-detail") {
     if (category === "location") {
@@ -803,13 +1015,6 @@ function generateFollowUpQuestions(taskType, question, results, category = null)
         "Koja još slična mjesta postoje u djelu?"
       );
     }
-  } else if (taskType === "characterization") {
-    const charName = extractCharacterName(question) || "lika";
-    questions.push(
-      `Kako se ${charName} mijenja kroz priču?`,
-      `Koje odluke ${charName} najviše utiču na zaplet?`,
-      `Kako drugi likovi reaguju na ${charName}?`
-    );
   } else if (taskType === "events") {
     questions.push(
       "Koji događaj predstavlja prekretnicu u priči?",
@@ -825,24 +1030,6 @@ function generateFollowUpQuestions(taskType, question, results, category = null)
   }
 
   return questions.slice(0, 3);
-}
-
-/* ---------- Deduplicate quotes ---------- */
-function deduplicateQuotes(allQuotes) {
-  const seen = new Set();
-  const unique = [];
-
-  for (const quote of allQuotes) {
-    const textKey = quote.text.toLowerCase().trim().substring(0, 100);
-    const key = `${textKey}-${quote.page}`;
-    
-    if (!seen.has(key)) {
-      seen.add(key);
-      unique.push(quote);
-    }
-  }
-
-  return unique;
 }
 
 /* ---------- Process single chunk ---------- */
