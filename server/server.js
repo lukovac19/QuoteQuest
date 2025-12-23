@@ -14,20 +14,7 @@ if (!fs.existsSync("uploads")) {
 }
 
 const app = express();
-app.use(cors({
-  origin: [
-    'https://quote-quest-nine.vercel.app',
-    'https://www.quotequest.site',
-    'https://quotequest.site',
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost:3000'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
+app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 
 // ========== PDF.js WARNING SILENCER ==========
@@ -72,142 +59,9 @@ try {
 const upload = multer({ dest: "uploads/" });
 
 /* ---------- CHUNK SIZE CONFIGURATION ---------- */
-/* ---------- CHUNK SIZE CONFIGURATION ---------- */
-const PAGES_PER_CHUNK = 6;  // ✅ SMANJENO (bilo 8)
-const MAX_TOKENS_PER_REQUEST = 1500;  // ✅ SMANJENO (bilo 2000)
-const MAX_CONCURRENT_REQUESTS = 2;  // ✅ KRITIČNO - samo 2 odjednom!
-
-/* ---------- RETRY HELPER WITH EXPONENTIAL BACKOFF ---------- */
-async function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function retryWithBackoff(fn, maxRetries = 3) {
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      // Ako je 429 (rate limit), čekaj i pokušaj ponovo
-      if (error.response?.status === 429) {
-        const retryAfter = parseInt(error.response.headers['retry-after']) || 30;
-        console.log(`Rate limit hit, waiting ${retryAfter}s before retry ${attempt + 1}/${maxRetries}...`);
-        
-        if (attempt < maxRetries - 1) {
-          await sleep((retryAfter + 5) * 1000); // Dodaj 5s buffer
-          continue;
-        }
-      }
-      throw error;
-    }
-  }
-}
-
-/* ---------- Process single chunk with retry ---------- */
-async function processChunk(chunk, taskType, question, totalPages, characterName, category) {
-  const systemPrompt = getSystemPrompt(totalPages, chunk, taskType, category);
-  
-  let userPrompt = `taskType: ${taskType}
-userQuestion: ${question}`;
-
-  if (characterName) {
-    userPrompt += `\nCHARACTER TO ANALYZE: ${characterName}
-IMPORTANT: Extract traits ONLY for ${characterName}. Ignore other characters.`;
-  }
-
-  if (taskType === "micro-detail") {
-    userPrompt += `\n\nMICRO-DETAIL CATEGORY: ${category}
-IMPORTANT: Extract EVERY sentence that answers the user's question. Be exhaustive, not selective.`;
-  }
-
-  userPrompt += `\n\nPDF TEXT (CHUNK):
-${chunk.text}`;
-
-  console.log('=== GROQ REQUEST ===');
-  console.log('Chunk pages:', chunk.startPage, '-', chunk.endPage);
-  console.log('Task type:', taskType);
-  console.log('Prompt lengths:', {
-    system: systemPrompt.length,
-    user: userPrompt.length,
-    totalEstimate: Math.ceil((systemPrompt.length + userPrompt.length) / 4)
-  });
-
-  const makeRequest = async () => {
-    const response = await axios.post(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        temperature: 0.05,
-        max_tokens: MAX_TOKENS_PER_REQUEST
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-    return response;
-  };
-
-  try {
-    // ✅ Retry sa backoff-om
-    const response = await retryWithBackoff(makeRequest, 3);
-
-    let cleaned = response.data.choices[0].message.content.trim();
-
-    if (cleaned.startsWith("```")) {
-      cleaned = cleaned.replace(/```json\n?|```\n?/g, "");
-    }
-
-    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-    if (jsonMatch) cleaned = jsonMatch[0];
-
-    const aiJson = JSON.parse(cleaned);
-    return aiJson.quotes || [];
-  } catch (error) {
-    console.error('=== GROQ ERROR ===');
-    console.error(`Chunk ${chunk.startPage}-${chunk.endPage}:`, error.message);
-    
-    if (error.response) {
-      console.error('Status:', error.response.status);
-      console.error('Response:', JSON.stringify(error.response.data, null, 2));
-    }
-    
-    return [];
-  }
-}
-
-/* ---------- Process chunks with delay between batches ---------- */
-async function processAllChunks(chunks, taskType, question, characterName, category) {
-  const totalPages = chunks[chunks.length - 1].endPage;
-  const allQuotes = [];
-
-  for (let i = 0; i < chunks.length; i += MAX_CONCURRENT_REQUESTS) {
-    const batch = chunks.slice(i, i + MAX_CONCURRENT_REQUESTS);
-    
-    console.log(`Processing batch ${Math.floor(i / MAX_CONCURRENT_REQUESTS) + 1}/${Math.ceil(chunks.length / MAX_CONCURRENT_REQUESTS)}`);
-    
-    const results = await Promise.all(
-      batch.map(chunk =>
-        processChunk(chunk, taskType, question, totalPages, characterName, category)
-      )
-    );
-    
-    results.forEach(r => allQuotes.push(...r));
-    
-    // ✅ Pauza između batch-eva da se rate limit ne premaši
-    if (i + MAX_CONCURRENT_REQUESTS < chunks.length) {
-      console.log('Waiting 10s before next batch to respect rate limits...');
-      await sleep(10000); // 10 sekundi pauze
-    }
-  }
-
-  return deduplicateQuotes(allQuotes).sort((a, b) => (a.page || 0) - (b.page || 0));
-}
+const PAGES_PER_CHUNK = 15;
+const MAX_TOKENS_PER_REQUEST = 3500;
+const MAX_CONCURRENT_REQUESTS = 5;
 
 /* ---------- MICRO-DETAIL KEYWORDS ---------- */
 const MICRO_DETAIL_KEYWORDS = {
@@ -484,14 +338,11 @@ const QUESTION_PATTERNS = {
   ],
   
   motif: [
-  /\bmotivi\b/i,
-  /\bmotiv\b/i,
-  /ponavljajući\s+motiv/i,
-  /ponavljaju[ćc]i\s+element/i,
-  /koji\s+se\s+motiv/i,
-  /navedi\s+motivi/i,
-  /izdvoji\s+motivi/i,
-  /motivi\s+u\s+djelu/i
+    /motiv/i,
+    /ponavlj/i,
+    /recurring/i,
+    /često\s+se\s+pojavljuje/i,
+    /često\s+spominje/i
   ],
   
   relation: [
@@ -628,228 +479,216 @@ function countWordOccurrencesInChunks(chunks, word) {
 }
 
 /* ---------- ENHANCED SYSTEM PROMPT ---------- */
-/* ---------- ENHANCED SYSTEM PROMPT ---------- */
 function getSystemPrompt(totalPages, chunkInfo, taskType, category = null) {
-  let basePrompt = `QuoteQuest AI - ultra-precise literature analysis engine.
+  let basePrompt = `You are QuoteQuest AI — an ULTRA-PRECISE literature analysis engine that understands EVERY possible user question variation.
 
-CHUNK CONTEXT: Analyzing pages ${chunkInfo.startPage}-${chunkInfo.endPage} (total book: ${totalPages} pages)
+CRITICAL: You must ground ALL answers ONLY in the provided PDF text. NEVER invent information.
 
-CORE RULES:
-1. BOSNIAN TITLES MANDATORY
-   - "element" field MUST be Bosnian
-   - Examples: "Osobina: Hrabrost", "Tema: Sloboda", "Kontrast: Nora ↔ Torvald"
-   - NEVER English: "Trait", "Theme", "Contrast"
-   - NEVER empty element field
+You are analyzing a CHUNK of a larger book.
+
+CHUNK INFO:
+- This chunk contains pages ${chunkInfo.startPage} to ${chunkInfo.endPage}
+- Total book has ${totalPages} pages
+- You are analyzing part of the complete work
+
+═══════════════════════════════════════════════════════════════════
+🔴 ABSOLUTE RULES 🔴
+═══════════════════════════════════════════════════════════════════
+
+1. BOSNIAN TITLES ONLY
+   ✅ "element" field MUST be in Bosnian
+   ✅ Examples: "Osobina: Hrabrost", "Tema: Sloboda", "Kontrast: Nora ↔ Torvald"
+   ❌ NEVER use English: "Trait", "Theme", "Contrast"
+   ❌ NEVER leave "element" empty or null
 
 2. EXTRACT ONLY FROM PROVIDED TEXT
-   - Use EXACT page numbers from "STRANICA X:" markers
-   - DO NOT invent or hallucinate content
-   - If information NOT in this chunk, DO NOT include it
+   ✅ Extract quotes ONLY from the chunk provided
+   ✅ Use page numbers EXACTLY as marked (STRANICA X:)
+   ✅ DO NOT invent or hallucinate content
+   ✅ If information is NOT in this chunk, DO NOT include it
+   ✅ If you cannot find the answer, do not make one up
 
-3. NO DUPLICATE QUOTES
-   - Each "text" field MUST be unique
-   - Never use same sentence twice
-   - No paraphrased versions of same content
+3. NEVER REPEAT QUOTES
+   ✅ Each "text" field must be UNIQUE
+   ✅ DO NOT use the same sentence twice
+   ✅ DO NOT use paraphrased versions of the same content
 
-4. ACCURATE CONTEXT
-   - Extract 3-8 sentences surrounding the quote
-   - Include sentences BEFORE and AFTER
-   - Must be ACTUAL paragraph from book
+4. ACCURATE CONTEXT EXTRACTION
+   ✅ Extract 3-8 sentences surrounding the quote
+   ✅ Include sentences BEFORE and AFTER the quote
+   ✅ The context must be the ACTUAL paragraph from the book
+   ❌ DO NOT just repeat the quote
 
-5. UNDERSTAND QUESTION VARIATIONS
-   - User may ask same thing in different ways
-   - Treat synonyms as same intent
-   - Examples: "kontrasti", "opreke", "suprotnosti" = all mean contrasts
-`;
+5. ACCURATE PAGE NUMBERS
+   ✅ Use the exact page from "STRANICA X:" markers
+   ✅ Never guess page numbers
+   ✅ If page is unclear, use 0
+
+6. UNDERSTAND ALL QUESTION VARIATIONS
+   ✅ User may ask the same thing in many different ways
+   ✅ Treat synonyms, paraphrases, and variations as same intent
+   ✅ Examples: "kontrasti", "opreke", "suprotnosti" = all mean contrasts`;
 
   if (taskType === "theme" || taskType === "idea" || taskType === "theme-idea") {
     basePrompt += `
-THEME/IDEA EXTRACTION MODE:
 
-ELEMENT FORMAT:
-- Theme: "Tema: [name of theme]"
-- Idea: "Ideja: [name of idea]"
-- Example: "Tema: Sloboda i društveni pritisak"
-- Example: "Ideja: Sukob individualnosti i društvenih normi"
+═══════════════════════════════════════════════════════════════════
+🔥 THEME/IDEA EXTRACTION MODE 🔥
+═══════════════════════════════════════════════════════════════════
 
-TEXT FIELD:
-- For themes/ideas: text field should be EMPTY ""
-- Main content goes in "meaning" field
+SPECIAL RULES FOR THEMES AND IDEAS:
 
-MEANING FIELD (CRITICAL):
-- Start with SHORT formulation (1 sentence)
-- Then detailed explanation (3-5 sentences)
-- Explain ESSENCE of theme/idea
-- Provide BROADER CONTEXT of how it manifests
-- Explain SIGNIFICANCE to overall narrative
-- Connect to CHARACTER DEVELOPMENT or PLOT
-- DO NOT just quote - ANALYZE and EXPLAIN
+1. ELEMENT FORMAT:
+   ✅ For theme: "Tema: [name of theme]"
+   ✅ For idea: "Ideja: [name of idea]"
+   ✅ Example: "Tema: Sloboda i društveni pritisak"
+   ✅ Example: "Ideja: Sukob između individualnosti i društvenih normi"
 
-Example:
-{
-  "element": "Tema: Sloboda",
-  "text": "",
-  "meaning": "Tema slobode prožima cijelo djelo kroz Norin sukob sa društvenim konvencijama. Ona se bori protiv uloge koju joj nameće patrijarhat i traži svoju autentičnost. Kroz njen razvoj, autor pokazuje kako lažna sloboda u braku vodi do unutrašnje praznine i gubitka identiteta. Njena konačna odluka da napusti porodicu predstavlja vrhunac ovog tematskog razvoja.",
-  "page": 45,
-  "context": "..."
-}
-`;
-  }
-  // ✅ DODAJ OVO U getSystemPrompt funkciju, POSLIJE contrast bloka, PRIJE micro-detail bloka
+2. TEXT FIELD:
+   - For themes/ideas, the "text" field should be EMPTY ("")
+   - NO quotes needed unless user explicitly asks
+   - The main content goes in the "meaning" field
 
-  if (taskType === "motif") {
-    basePrompt += `
-MOTIF EXTRACTION MODE:
+3. MEANING FIELD (MOST IMPORTANT):
+   ✅ Start with SHORT formulation (1 sentence)
+   ✅ Then provide detailed explanation (3-5 sentences)
+   ✅ Explain the ESSENCE of the theme/idea
+   ✅ Provide BROADER CONTEXT of how it manifests in the work
+   ✅ Explain its SIGNIFICANCE to the overall narrative
+   ✅ Connect it to CHARACTER DEVELOPMENT or PLOT
+   ✅ DO NOT just quote - ANALYZE and EXPLAIN
 
-ELEMENT FORMAT:
-- "Motiv: [name of motif]"
-- Example: "Motiv: Lutka"
-- Example: "Motiv: Novac i dug"
-- Example: "Motiv: Ples tarantele"
-
-WHAT IS A MOTIF:
-- Recurring element (object, action, phrase, image) throughout the work
-- Appears multiple times with symbolic significance
-- Contributes to theme or atmosphere
-- Can be concrete (object) or abstract (idea)
-
-WHAT TO LOOK FOR:
-- Objects mentioned repeatedly (letters, doors, tree, costume)
-- Actions repeated by characters (lying, dancing, borrowing)
-- Phrases or words appearing multiple times
-- Images or descriptions that recur
-- Symbolic elements with layered meaning
-
-TEXT FIELD:
-- Include 1-2 representative quotes showing the motif
-- Choose most significant occurrences
-- Can combine quotes from different scenes if illustrative
-
-MEANING FIELD:
-- Explain WHAT the motif is (first mention what it literally is)
-- Describe HOW it recurs throughout the work
-- Analyze WHY it's significant (symbolic meaning)
-- Connect to themes and character development
-- Explain its function in the overall narrative
-
-Example:
-{
-  "element": "Motiv: Lutka",
-  "text": "Torvald kaže: 'Moja mala vjeverica.' Kasnije Nora odgovara: 'Nisam više tvoja lutka.'",
-  "meaning": "Motiv lutke se provlači kroz cijelo djelo kroz Torvaldove nadimke za Noru (vjeverica, ptica, lutka). On je tretira kao igračku bez svoje volje. Ovaj motiv simbolizuje Norin nedostatak autonomije u braku i patrijarhalnu kontrolu. U kulminaciji, Nora odbacuje ulogu lutke, što predstavlja njen duhovni preporod i borbu za identitet.",
-  "page": 12,
-  "context": "..."
-}
-
-IMPORTANT:
-- Extract 3-8 major motifs
-- Focus on RECURRING elements, not one-time occurrences
-- Each motif must appear at least 2-3 times in the work
-- Explain both literal and symbolic significance
-`;
+4. EXAMPLE FORMAT:
+   {
+     "element": "Tema: Sloboda",
+     "text": "",
+     "meaning": "Tema slobode prožima cijelo djelo kroz Norin sukob sa društvenim konvencijama. Ona se bori protiv uloge koju joj nameće patrijarhat i traži svoju autentičnost. Kroz njen razvoj, autor pokazuje kako lažna sloboda u braku vodi do unutrašnje praznine i gubitka identiteta. Njena konačna odluka da napusti porodicu predstavlja vrhunac ovog tematskog razvoja.",
+     "page": 45,
+     "context": "..."
+   }`;
   }
 
   if (taskType === "contrast") {
     basePrompt += `
-CONTRAST EXTRACTION MODE:
 
-ELEMENT FORMAT:
-- "Kontrast: [A ↔ B]"
-- Example: "Kontrast: Nora (sloboda) ↔ Torvald (kontrola)"
-- Example: "Kontrast: Javni ugled ↔ Privatna moralnost"
+═══════════════════════════════════════════════════════════════════
+🔥 CONTRAST EXTRACTION MODE 🔥
+═══════════════════════════════════════════════════════════════════
 
-WHAT TO LOOK FOR:
-- Opposing characters (personality, values, goals)
-- Moral dilemmas (duty vs. desire)
-- Symbolic contrasts (light vs. darkness)
-- Social contrasts (rich vs. poor, freedom vs. oppression)
-- Emotional contrasts (happiness vs. despair)
-- Setting contrasts (public vs. private spaces)
+You must identify CONTRASTS and OPPOSITIONS in the work.
+User may ask: "kontrasti", "opreke", "suprotnosti", "razlike", "poređenje" - all mean the same.
 
-TEXT FIELD:
-- Include quote that illustrates the contrast
-- Can combine quotes from both sides if needed
+1. ELEMENT FORMAT:
+   ✅ "Kontrast: [A ↔ B]"
+   ✅ Example: "Kontrast: Nora (sloboda) ↔ Torvald (kontrola)"
+   ✅ Example: "Kontrast: Javni ugled ↔ Privatna moralnost"
 
-MEANING FIELD:
-- Explain BOTH sides of the contrast
-- Show how they interact or conflict
-- Explain significance to overall work
-- Connect to themes and character development
+2. WHAT TO LOOK FOR:
+   - Opposing characters (personality, values, goals)
+   - Moral dilemmas (duty vs. desire)
+   - Symbolic contrasts (light vs. darkness)
+   - Social contrasts (rich vs. poor, freedom vs. oppression)
+   - Emotional contrasts (happiness vs. despair)
+   - Setting contrasts (public vs. private spaces)
 
-Example:
-{
-  "element": "Kontrast: Javni ugled ↔ Privatna moralnost",
-  "text": "Torvald kaže: 'U našoj kući mora biti sve kako treba.' Ali Nora skriva tajnu falsifikovanja potpisa.",
-  "meaning": "Torvald je opsjednut javnim ugledom i društvenim konvencijama, dok Nora živi u tajnosti svog prijestupa. Ovaj kontrast razotkriva licemjerje buržoaskog društva gdje površina je važnija od istine. Njihov brak funkcionira samo dok se održava fasada.",
-  "page": 23,
-  "context": "..."
-}
-`;
+3. TEXT FIELD:
+   ✅ Include a quote that illustrates the contrast
+   ✅ Can combine quotes from both sides if needed
+
+4. MEANING FIELD:
+   ✅ Explain BOTH sides of the contrast
+   ✅ Show how they interact or conflict
+   ✅ Explain significance to the overall work
+   ✅ Connect to themes and character development
+
+5. EXAMPLE:
+   {
+     "element": "Kontrast: Javni ugled ↔ Privatna moralnost",
+     "text": "Torvald kaže: 'U našoj kući mora biti sve kako treba.' Ali Nora skriva tajnu falsifikovanja potpisa.",
+     "meaning": "Torvald je opsjednut javnim ugledom i društvenim konvencijama, dok Nora živi u tajnosti svog prijestupa. Ovaj kontrast razotkriva licemjerje buržoaskog društva gdje površina je važnija od istine. Njihov brak funkcionira samo dok se održava fasada.",
+     "page": 23,
+     "context": "..."
+   }`;
   }
 
   if (taskType === "micro-detail") {
     basePrompt += `
-MICRO-DETAIL EXTRACTION MODE (Category: ${category || "general"}):
 
-EXHAUSTIVE EXTRACTION:
-- Find ALL sentences that answer the question
-- Do NOT summarize or generalize
-- Extract EXACT text as written
-- If something appears 10 times, include all 10 occurrences
-- Chronological order by page number
+═══════════════════════════════════════════════════════════════════
+🔥 MICRO-DETAIL EXTRACTION MODE 🔥
+═══════════════════════════════════════════════════════════════════
 
-${getMicroDetailCategoryInstructions(category)}
+You are in MICRO-DETAIL mode for answering specific factual questions.
 
-TEXT FIELD:
-- Must contain EXACT quote answering the question
-- Full sentence or passage from book
-- If embedded in dialogue, include speaker
+1. EXTRACT EVERY SINGLE MENTION
+   ✅ Find ALL sentences that answer the question
+   ✅ Do not summarize or generalize
+   ✅ Extract the EXACT text as written
+   ✅ If something appears multiple times, include all occurrences
 
-MEANING FIELD:
-- Explain HOW this quote answers the specific question
-- Be precise about what detail it provides
-- Example: "Opisuje boju haljine koju Nora nosi u prvom činu"
-- Provide broader context if relevant
+2. ELEMENT FORMAT (CATEGORY: ${category || "general"}):
+   ${getMicroDetailCategoryInstructions(category)}
 
-IF ANSWER NOT FOUND:
-- If detail NOT mentioned in this chunk, return empty array
-- DO NOT invent or assume information
-`;
+3. BE EXHAUSTIVE
+   ✅ If something is mentioned 10 times, extract all 10
+   ✅ Include even small descriptive details
+   ✅ Chronological order by page number
+
+4. TEXT FIELD:
+   ✅ Must contain the EXACT quote that answers the question
+   ✅ Full sentence or passage from the book
+   ✅ If answer is embedded in dialogue, include speaker
+
+5. MEANING FIELD:
+   ✅ Explain HOW this quote answers the specific question
+   ✅ Be precise about what detail it provides
+   ✅ Example: "Opisuje boju haljine koju Nora nosi u prvom činu"
+   ✅ Provide broader context if relevant
+
+6. IF ANSWER NOT FOUND:
+   - If the detail is NOT mentioned in this chunk, return empty array
+   - DO NOT invent or assume information`;
   }
 
   if (taskType === "characterization") {
     basePrompt += `
-CHARACTERIZATION MODE:
 
-ELEMENT FORMAT:
-- "Osobina: [adjective trait]"
-- Example: "Osobina: Hladnoća"
-- Example: "Osobina: Lukavstvo"
-- Example: "Osobina: Naivnost"
-- NEVER: "Osobina: Nora" (name, not trait)
-- NEVER: "Osobina: Protagonist" (role, not trait)
+═══════════════════════════════════════════════════════════════════
+🔥 CHARACTERIZATION MODE 🔥
+═══════════════════════════════════════════════════════════════════
 
-TEXT FIELD:
-- Quote that demonstrates this trait
-- Can be dialogue or narrative description
-- Show, don't just tell
+1. ELEMENT FORMAT:
+   ✅ "Osobina: [adjective trait]"
+   ✅ Example: "Osobina: Hladnoća"
+   ✅ Example: "Osobina: Lukavstvo"
+   ✅ Example: "Osobina: Naivnost"
+   ❌ NEVER: "Osobina: Nora" (name, not trait)
+   ❌ NEVER: "Osobina: Protagonist" (role, not trait)
 
-MEANING FIELD:
-- Explain how this quote shows the trait
-- Connect to character development
-- Provide psychological insight
-- Explain significance in story
+2. TEXT FIELD:
+   ✅ Quote that demonstrates this trait
+   ✅ Can be dialogue or narrative description
+   ✅ Show, don't just tell
 
-EXTRACT 5-10 TRAITS:
-- Personality traits
-- Moral qualities
-- Behavioral patterns
-- Psychological characteristics
-`;
+3. MEANING FIELD:
+   ✅ Explain how this quote shows the trait
+   ✅ Connect to character development
+   ✅ Provide psychological insight
+   ✅ Explain significance in story
+
+4. EXTRACT 5-10 TRAITS:
+   - Personality traits
+   - Moral qualities
+   - Behavioral patterns
+   - Psychological characteristics`;
   }
 
   basePrompt += `
-OUTPUT FORMAT:
+
+═══════════════════════════════════════════════════════════════════
+📋 OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════════
+
 {
   "type": "${taskType}",
   "quotes": [
@@ -864,15 +703,18 @@ OUTPUT FORMAT:
   ]
 }
 
-FINAL REMINDERS:
+═══════════════════════════════════════════════════════════════════
+CRITICAL REMINDERS:
+═══════════════════════════════════════════════════════════════════
+
 - ALL "element" fields MUST be in BOSNIAN
 - NEVER use English words in "element"
 - NEVER leave "element" empty
-- For themes/ideas: "text" is empty, focus on "meaning" field
-- For contrasts: identify oppositions and explain significance
+- For themes/ideas: "text" is empty, focus on "meaning" field with deep analysis
+- For contrasts: identify oppositions and explain their significance
 - For micro-details: extract EXACT text with full context
 - For characterization: traits must be ADJECTIVES, not names
-- NEVER invent information not in text
+- NEVER invent information not in the text
 - If answer not in chunk, return empty array
 
 Return ONLY valid JSON. NO markdown. NO explanations.`;
@@ -884,89 +726,76 @@ Return ONLY valid JSON. NO markdown. NO explanations.`;
 function getMicroDetailCategoryInstructions(category) {
   const instructions = {
     location: `
-ELEMENT FORMAT: "Lokacija: <place name>"
-Example: "Lokacija: Helmerin salon"
-Extract mentions of: rooms, buildings, streets, cities
-Include descriptions of these locations`,
+   - element format: "Lokacija: <place name>"
+   - Example: "Lokacija: Helmerin salon"
+   - Extract mentions of rooms, buildings, streets, cities
+   - Include descriptions of these locations`,
     
     object: `
-ELEMENT FORMAT: "Predmet: <object name>"
-Example: "Predmet: Prsten koji je Nora dobila"
-Extract mentions of: items, tools, possessions
-Include what characters do with these objects`,
+   - element format: "Predmet: <object name>"
+   - Example: "Predmet: Prsten koji je Nora dobila"
+   - Extract mentions of items, tools, possessions
+   - Include what characters do with these objects`,
     
     clothing: `
-ELEMENT FORMAT: "Odjeća: <description>"
-Example: "Odjeća: Norina haljina u prvom činu"
-Extract: color, style, type of clothing
-Include all appearance details`,
+   - element format: "Odjeća: <description>"
+   - Example: "Odjeća: Norina haljina u prvom činu"
+   - Extract color, style, type of clothing
+   - Include all appearance details`,
     
     food: `
-ELEMENT FORMAT: "Hrana/Piće: <item>"
-Example: "Hrana/Piće: Šampanjac na zabavi"
-Extract mentions of: eating, drinking
-Include context of meals and gatherings`,
+   - element format: "Hrana/Piće: <item>"
+   - Example: "Hrana/Piće: Šampanjac na zabavi"
+   - Extract mentions of eating, drinking
+   - Include context of meals and gatherings`,
     
     appearance: `
-ELEMENT FORMAT: "Detalj: <feature>"
-Example: "Detalj: Florentinova kosa"
-Extract: physical descriptions
-Include emotional state if described`,
+   - element format: "Detalj: <feature>"
+   - Example: "Detalj: Florentinova kosa"
+   - Extract physical descriptions
+   - Include emotional state if described`,
     
     mention: `
-ELEMENT FORMAT: "Spominjanje: <what is mentioned>"
-Example: "Spominjanje: Prvo spominjanje Krogstada"
-Extract: first mentions or all mentions as requested
-Note the context of each mention`,
+   - element format: "Spominjanje: <what is mentioned>"
+   - Example: "Spominjanje: Prvo spominjanje Krogstada"
+   - Extract first mentions or all mentions as requested
+   - Note the context of each mention`,
     
     action: `
-ELEMENT FORMAT: "Radnja: <action>"
-Example: "Radnja: Norin odlazak iz kuće"
-Extract: sequence of events
-Include who does what and when`,
+   - element format: "Radnja: <action>"
+   - Example: "Radnja: Norin odlazak iz kuće"
+   - Extract sequence of events
+   - Include who does what and when`,
     
     dialogue: `
-ELEMENT FORMAT: "Dijalog: <speaker>"
-Example: "Dijalog: Torvaldove riječi ljutnje"
-Extract: exact words spoken
-Include speaker identification`,
+   - element format: "Dijalog: <speaker>"
+   -   - element format: "Dijalog: <speaker>"
+   - Example: "Dijalog: Torvaldove riječi ljutnje"
+   - Extract exact words spoken
+   - Include speaker identification`,
     
     time: `
-ELEMENT FORMAT: "Vrijeme: <when>"
-Example: "Vrijeme: Božićno jutro"
-Extract: temporal markers
-Include time of day, season, duration`
+   - element format: "Vrijeme: <when>"
+   - Example: "Vrijeme: Božićno jutro"
+   - Extract temporal markers
+   - Include time of day, season, duration`
   };
   
   return instructions[category] || `
-ELEMENT FORMAT: "Detalj: <description>"
-Example: "Detalj: Starost Florentina"
-Extract exactly what the question asks for`;
+   - element format: "Detalj: <description>"
+   - Example: "Detalj: Starost Florentina"
+   - Extract exactly what the question asks for`;
 }
 
-/* ---------- Generate follow-up questions ---------- */
 /* ---------- Generate follow-up questions ---------- */
 function generateFollowUpQuestions(taskType, question, results, category = null) {
   const questions = [];
 
-  if (taskType === "characterization") {
-    const charName = extractCharacterName(question) || "lika";
-    questions.push(
-      `Kako se ${charName} mijenja kroz priču?`,
-      `Koje odluke ${charName} najviše utiču na zaplet?`,
-      `Kako drugi likovi reaguju na ${charName}?`
-    );
-  } else if (taskType === "contrast") {
+  if (taskType === "contrast") {
     questions.push(
       "Kako se ovaj kontrast razvija kroz djelo?",
       "Koji drugi kontrasti su prisutni u djelu?",
       "Kako kontrasti doprinose centralnoj temi?"
-    );
-  } else if (taskType === "motif") {
-    questions.push(
-      "Kako se ovaj motiv razvija kroz djelo?",
-      "Koji drugi motivi su prisutni u djelu?",
-      "Kakvu simboliku ovaj motiv nosi?"
     );
   } else if (taskType === "theme" || taskType === "theme-idea") {
     questions.push(
@@ -979,18 +808,6 @@ function generateFollowUpQuestions(taskType, question, results, category = null)
       "Kako autor razvija ovu ideju kroz djelo?",
       "Koji likovi najbolje predstavljaju ovu ideju?",
       "Kako se ideja povezuje s društvenim kontekstom?"
-    );
-  } else if (taskType === "symbolism") {
-    questions.push(
-      "Koji još simboli postoje u djelu?",
-      "Kako se simbolika povezuje s temama?",
-      "Kako autor koristi simbole za dublju poruku?"
-    );
-  } else if (taskType === "relation") {
-    questions.push(
-      "Kako se ovaj odnos razvija kroz priču?",
-      "Koji događaji najviše utiču na odnos?",
-      "Kako odnos odražava šire teme?"
     );
   } else if (taskType === "micro-detail") {
     if (category === "location") {
@@ -1018,6 +835,13 @@ function generateFollowUpQuestions(taskType, question, results, category = null)
         "Koja još slična mjesta postoje u djelu?"
       );
     }
+  } else if (taskType === "characterization") {
+    const charName = extractCharacterName(question) || "lika";
+    questions.push(
+      `Kako se ${charName} mijenja kroz priču?`,
+      `Koje odluke ${charName} najviše utiču na zaplet?`,
+      `Kako drugi likovi reaguju na ${charName}?`
+    );
   } else if (taskType === "events") {
     questions.push(
       "Koji događaj predstavlja prekretnicu u priči?",
@@ -1033,6 +857,24 @@ function generateFollowUpQuestions(taskType, question, results, category = null)
   }
 
   return questions.slice(0, 3);
+}
+
+/* ---------- Deduplicate quotes ---------- */
+function deduplicateQuotes(allQuotes) {
+  const seen = new Set();
+  const unique = [];
+
+  for (const quote of allQuotes) {
+    const textKey = quote.text.toLowerCase().trim().substring(0, 100);
+    const key = `${textKey}-${quote.page}`;
+    
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(quote);
+    }
+  }
+
+  return unique;
 }
 
 /* ---------- Process single chunk ---------- */
@@ -1055,20 +897,11 @@ IMPORTANT: Extract EVERY sentence that answers the user's question. Be exhaustiv
   userPrompt += `\n\nPDF TEXT (CHUNK):
 ${chunk.text}`;
 
-  // ✅ DEBUGGING - vidi šta šalješ
-  console.log('=== GROQ REQUEST ===');
-  console.log('Chunk pages:', chunk.startPage, '-', chunk.endPage);
-  console.log('Prompt lengths:', {
-    system: systemPrompt.length,
-    user: userPrompt.length,
-    totalEstimate: Math.ceil((systemPrompt.length + userPrompt.length) / 4)
-  });
-
   try {
     const response = await axios.post(
-      "https://api.groq.com/openai/v1/chat/completions",
+      "https://api.together.ai/v1/chat/completions",
       {
-        model: "llama-3.3-70b-versatile",
+        model: "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
@@ -1078,7 +911,7 @@ ${chunk.text}`;
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+          Authorization: `Bearer ${process.env.TOGETHER_API_KEY}`,
           "Content-Type": "application/json"
         }
       }
@@ -1096,24 +929,7 @@ ${chunk.text}`;
     const aiJson = JSON.parse(cleaned);
     return aiJson.quotes || [];
   } catch (error) {
-
-    // ✅ DETALJNO LOGOVANJE
-
-    console.error('=== GROQ ERROR ===');
-    console.error(`Chunk ${chunk.startPage}-${chunk.endPage}:`, error.message);
-
-    if (error.response) {
-      console.error('Status:', error.response.status);
-      console.error('Response:', JSON.stringify(error.response.data, null, 2));
-      console.error('Headers:', error.response.headers);
-    }
-
-    if (error.config) {
-      console.error('Request URL:', error.config.url);
-      console.error('API Key exists:', !!error.config.headers?.Authorization);
-      console.error('API Key preview:', error.config.headers?.Authorization?.substring(0, 25) + '...');
-    }
-
+    console.error(`Error processing chunk ${chunk.startPage}-${chunk.endPage}:`, error.message);
     return [];
   }
 }
