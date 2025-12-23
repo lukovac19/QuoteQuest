@@ -12,7 +12,7 @@ dotenv.config();
 if (!fs.existsSync("uploads")) {
   fs.mkdirSync("uploads");
 }
-git commit -m "Add custom domain to CORS"
+
 const app = express();
 app.use(cors({
   origin: [
