@@ -5,6 +5,7 @@ import { QuoteQuestAbout } from './components/QuoteQuestAbout';
 import { QuoteQuestFooter } from './components/QuoteQuestFooter';
 import { SavedQuotesModal } from './components/SavedQuotesModal';
 import { Toaster } from './components/ui/sonner';
+import { Analytics } from "@vercel/analytics/react";  // ← DODAJ OVO
 
 interface SavedQuote {
   id: string;
@@ -80,6 +81,8 @@ export default function App() {
           },
         }}
       />
+
+      <Analytics />  {/* ← DODAJ OVO */}
     </div>
   );
 }
