@@ -29,7 +29,7 @@ export function QuoteQuestFooter() {
           </div>
 
           <p className="text-[#E6F0FF]/50 text-sm">
-            © 2025 QuoteQuest — Sva prava zadržana.
+            © 2026 QuoteQuest — Sva prava zadržana.
           </p>
         </div>
       </div>
