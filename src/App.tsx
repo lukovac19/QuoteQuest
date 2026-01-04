@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { QuoteQuestNavigation } from './components/QuoteQuestNavigation';
 import { QuoteQuestHero } from './components/QuoteQuestHero';
 import { QuoteQuestAbout } from './components/QuoteQuestAbout';
-import { QuoteQuestFooter } from './components/QuoteQuestFooter';
+import QuoteQuestFooter from './components/QuoteQuestFooter';
 import { SavedQuotesModal } from './components/SavedQuotesModal';
 import { Toaster } from './components/ui/sonner';
 import { Analytics } from "@vercel/analytics/react";  // ← DODAJ OVO
