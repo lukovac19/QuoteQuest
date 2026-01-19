@@ -1,192 +1,26 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>QuoteQuest – AI za lektire</title>
-    <link rel="icon" type="image/png" href="/favicon.png" />
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
+import { Instagram, Mail } from 'lucide-react';
 
-      body {
-        font-family: 'Orbitron', sans-serif;
-        background: linear-gradient(135deg, #0A0F18 0%, #04245A 50%, #0A0F18 100%);
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        position: relative;
-        overflow: hidden;
-      }
-
-      /* Animated background glow */
-      .bg-glow {
-        position: absolute;
-        inset: 0;
-        overflow: hidden;
-        pointer-events: none;
-      }
-
-      .glow-circle {
-        position: absolute;
-        border-radius: 50%;
-        filter: blur(80px);
-        opacity: 0.15;
-        animation: pulse 4s ease-in-out infinite;
-      }
-
-      .glow-1 {
-        width: 400px;
-        height: 400px;
-        background: #00CFFF;
-        top: -200px;
-        left: -200px;
-      }
-
-      .glow-2 {
-        width: 350px;
-        height: 350px;
-        background: #04245A;
-        bottom: -150px;
-        right: -150px;
-        animation-delay: 2s;
-      }
-
-      @keyframes pulse {
-        0%, 100% { opacity: 0.15; transform: scale(1); }
-        50% { opacity: 0.25; transform: scale(1.1); }
-      }
-
-      .container {
-        text-align: center;
-        position: relative;
-        z-index: 10;
-        padding: 2rem;
-      }
-
-      /* Icon */
-      .icon-wrapper {
-        margin-bottom: 2rem;
-      }
-
-      .icon {
-        width: 80px;
-        height: 80px;
-        margin: 0 auto;
-        background: linear-gradient(135deg, #00CFFF 0%, #04245A 100%);
-        border-radius: 20px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 0 40px rgba(0, 207, 255, 0.3);
-        animation: bounce 2s ease-in-out infinite;
-      }
-
-      @keyframes bounce {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-10px); }
-      }
-
-      .icon svg {
-        width: 40px;
-        height: 40px;
-        stroke: white;
-        fill: none;
-        stroke-width: 2;
-      }
-
-      /* Text */
-      h1 {
-        font-size: clamp(2rem, 5vw, 3.5rem);
-        font-weight: 700;
-        margin-bottom: 1rem;
-        background: linear-gradient(90deg, #00CFFF 0%, #04245A 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-      }
-
-      .subtitle {
-        font-size: 1rem;
-        color: #00CFFF;
-        opacity: 0.8;
-        font-weight: 500;
-      }
-
-      /* Loading dots */
-      .loading {
-        margin-top: 2rem;
-        display: flex;
-        justify-content: center;
-        gap: 8px;
-      }
-
-      .dot {
-        width: 8px;
-        height: 8px;
-        background: #00CFFF;
-        border-radius: 50%;
-        animation: bounce-dot 1.4s ease-in-out infinite;
-      }
-
-      .dot:nth-child(2) {
-        animation-delay: 0.2s;
-      }
-
-      .dot:nth-child(3) {
-        animation-delay: 0.4s;
-      }
-
-      @keyframes bounce-dot {
-        0%, 80%, 100% { transform: translateY(0); }
-        40% { transform: translateY(-12px); }
-      }
-
-      @media (max-width: 640px) {
-        .icon {
-          width: 64px;
-          height: 64px;
-        }
-        
-        .icon svg {
-          width: 32px;
-          height: 32px;
-        }
-      }
-    </style>
-  </head>
-
-  <body>
-    <div class="bg-glow">
-      <div class="glow-circle glow-1"></div>
-      <div class="glow-circle glow-2"></div>
-    </div>
-
-    <div class="container">
-      <div class="icon-wrapper">
-        <div class="icon">
-          <svg viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-          </svg>
+export function QuoteQuestFooter() {
+  return (
+    <footer className="relative bg-[#0A0A0A] border-t border-[#00D1FF]/10">
+      <div className="max-w-[1200px] mx-auto px-6 py-8">
+        <div className="text-center space-y-4">
+          <p className="text-[#E6F0FF]/60 text-sm max-w-[600px] mx-auto leading-relaxed">
+            Pratite nas na Instagramu da budete u toku! Za sva pitanja, nedoumice ili prijedloge pišite nam na Instagram ili email, uvijek smo tu :)
+          </p>
+          <div className="flex items-center justify-center gap-6">
+            <a href="https://www.instagram.com/quotequest.site?igsh=cGMzY2pvYnI3bHVr" target="_blank" rel="noopener noreferrer" className="text-[#E6F0FF]/50 hover:text-[#00D1FF] transition-all duration-300 hover:scale-110">
+              <Instagram className="w-5 h-5" />
+            </a>
+            <a href="mailto:info.quotequest@gmail.com" className="text-[#E6F0FF]/50 hover:text-[#00D1FF] transition-all duration-300 hover:scale-110">
+              <Mail className="w-5 h-5" />
+            </a>
+          </div>
+          <p className="text-[#E6F0FF]/50 text-sm">
+            © 2026 QuoteQuest — Sva prava zadržana.
+          </p>
         </div>
       </div>
-      
-      <h1>Vraćamo se uskoro</h1>
-      
-      <p class="subtitle">Vaš QuoteQuest</p>
-      
-      <div class="loading">
-        <div class="dot"></div>
-        <div class="dot"></div>
-        <div class="dot"></div>
-      </div>
-    </div>
-
-  </body>
-</html>
+    </footer>
+  );
+}
