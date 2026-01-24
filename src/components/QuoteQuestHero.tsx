@@ -321,6 +321,66 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
     >
       <div className="absolute inset-0 bg-gradient-to-br from-[#001F54]/20 via-transparent to-transparent" />
 
+     <div className="absolute inset-0 bg-gradient-to-br from-[#001F54]/20 via-transparent to-transparent" />
+      
+      {/* Lijeva strelica */}
+      <div className="hidden lg:block absolute left-8 top-1/2 -translate-y-1/2">
+        <svg
+          width="40"
+          height="200"
+          viewBox="0 0 40 200"
+          className="animate-bounce-slow"
+          style={{ animationDelay: '0s' }}
+        >
+          <line
+            x1="20"
+            y1="10"
+            x2="20"
+            y2="180"
+            stroke="#00D1FF"
+            strokeWidth="2"
+            strokeLinecap="round"
+            opacity="0.6"
+          />
+          <path
+            d="M20 180 L15 165 M20 180 L25 165"
+            stroke="#00D1FF"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            opacity="0.8"
+          />
+        </svg>
+      </div>
+
+      {/* Desna strelica */}
+      <div className="hidden lg:block absolute right-8 top-1/2 -translate-y-1/2">
+        <svg
+          width="40"
+          height="200"
+          viewBox="0 0 40 200"
+          className="animate-bounce-slow"
+          style={{ animationDelay: '0.3s' }}
+        >
+          <line
+            x1="20"
+            y1="10"
+            x2="20"
+            y2="180"
+            stroke="#00D1FF"
+            strokeWidth="2"
+            strokeLinecap="round"
+            opacity="0.6"
+          />
+          <path
+            d="M20 180 L15 165 M20 180 L25 165"
+            stroke="#00D1FF"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            opacity="0.8"
+          />
+        </svg>
+      </div>
+      
       <div className="relative z-10 max-w-[1200px] mx-auto px-6 lg:px-12 py-20 w-full">
         <div className="text-center mb-16">
           <h1

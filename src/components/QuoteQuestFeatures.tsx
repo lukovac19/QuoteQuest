@@ -11,7 +11,7 @@ export function QuoteQuestFeatures() {
             className="text-5xl md:text-6xl mb-6 text-white"
             style={{ fontFamily: 'Orbitron, sans-serif' }}
           >
-            QuoteQuest. Bez konkurencije.
+            QuoteQuest, bez konkurencije.
           </h2>
           <p className="text-xl text-[#E6F0FF]/70 max-w-3xl mx-auto leading-relaxed">
             Izaberi način rada i započni analizu.
