@@ -47,6 +47,22 @@ export function QuoteQuestNavigation({ onOpenSavedQuotes }: QuoteQuestNavigation
                 )}
               </a>
 
+              {/* FEATURES */}
+              <a
+                href="#features"
+                onClick={() => setActiveLink('features')}
+                className={`relative text-[#E6F0FF]/70 hover:text-[#00D1FF] transition-all duration-300 ${
+                  activeLink === 'features' ? 'text-[#00D1FF]' : ''
+                }`}
+              >
+                Mogućnosti
+                {activeLink === 'features' && (
+                  <span
+                    className="absolute -bottom-1 left-0 w-full h-0.5 bg-[#00D1FF]"
+                  />
+                )}
+              </a>
+
               {/* ABOUT */}
               <a
                 href="#about"

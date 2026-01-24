@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { QuoteQuestNavigation } from './components/QuoteQuestNavigation';
 import { QuoteQuestHero } from './components/QuoteQuestHero';
+import { QuoteQuestFeatures } from "./components/QuoteQuestFeatures";
 import { QuoteQuestAbout } from './components/QuoteQuestAbout';
 import { QuoteQuestFooter } from './components/QuoteQuestFooter';
 import { SavedQuotesModal } from './components/SavedQuotesModal';
@@ -57,6 +58,7 @@ export default function App() {
       />
 
       <QuoteQuestHero onQuoteSaved={loadSavedQuotes} />
+      <QuoteQuestFeatures />
 
       <QuoteQuestAbout />
       <QuoteQuestFooter />
