@@ -72,8 +72,8 @@ try {
 const upload = multer({ dest: "uploads/" });
 
 /* ---------- CHUNK SIZE CONFIGURATION ---------- */
-const PAGES_PER_CHUNK = 15;
-const MAX_TOKENS_PER_REQUEST = 3500;
+const PAGES_PER_CHUNK = 20;
+const MAX_TOKENS_PER_REQUEST = 1200;
 const MAX_CONCURRENT_REQUESTS = 5;
 
 /* ---------- MICRO-DETAIL KEYWORDS ---------- */
@@ -100,8 +100,8 @@ const MICRO_DETAIL_KEYWORDS = {
     "fizički", "fizicki", "vanjski", "vanjski", "lice", "kosa"
   ],
   mention: [
-    "spominje", "prvi put", "pojavljuje se", "navodi se",
-    "kada se spominje", "gdje se spominje", "koliko puta"
+    "spomenje", "prvi put", "pojavljuje se", "navodi se",
+    "kada se spomenje", "gdje se spomenje", "koliko puta"
   ],
   action: [
     "redoslijed", "redosled", "šta se dešava", "sta se desava",
@@ -354,8 +354,8 @@ const QUESTION_PATTERNS = {
     /motiv/i,
     /ponavlj/i,
     /recurring/i,
-    /često\s+se\s+pojavljuje/i,
-    /često\s+spominje/i
+    /often\s+se\s+pojavljuje/i,
+    /often\s+se\s+spomnuje/i
   ],
   
   relation: [
@@ -383,7 +383,7 @@ const QUESTION_PATTERNS = {
     /koliko\s+puta/i,
     /broj\s+ponavljanja/i,
     /učestalost/i,
-    /koliko\s+se\s+spominje/i
+    /koliko\s+se\s+spomnuje/i
   ],
   
   quotes: [
@@ -769,8 +769,8 @@ function getMicroDetailCategoryInstructions(category) {
    - Include emotional state if described`,
     
     mention: `
-   - element format: "Spominjanje: <what is mentioned>"
-   - Example: "Spominjanje: Prvo spominjanje Krogstada"
+   - element format: "Spomenjanje: <what is mentioned>"
+   - Example: "Spomenjanje: Prvo spomenjanje Krogstada"
    - Extract first mentions or all mentions as requested
    - Note the context of each mention`,
     
@@ -782,7 +782,6 @@ function getMicroDetailCategoryInstructions(category) {
     
     dialogue: `
    - element format: "Dijalog: <speaker>"
-   -   - element format: "Dijalog: <speaker>"
    - Example: "Dijalog: Torvaldove riječi ljutnje"
    - Extract exact words spoken
    - Include speaker identification`,
@@ -825,7 +824,7 @@ function generateFollowUpQuestions(taskType, question, results, category = null)
   } else if (taskType === "micro-detail") {
     if (category === "location") {
       questions.push(
-        "Koje još lokacije se spominju u djelu?",
+        "Koje još lokacije se spomnuju u djelu?",
         "Kako se opis prostora mijenja kroz priču?",
         "Koja lokacija je najvažnija za radnju?"
       );
@@ -837,9 +836,9 @@ function generateFollowUpQuestions(taskType, question, results, category = null)
       );
     } else if (category === "mention") {
       questions.push(
-        "Kako se učestalost spominjanja mijenja kroz djelo?",
-        "U kojim kontekstima se najčešće spominje?",
-        "Koja spominjanja su najznačajnija?"
+        "Kako se učestalost spomnjevanja mijenja kroz djelo?",
+        "U kojim kontekstima se najčešće spomnuje?",
+        "Koja spomnjevanja su najznačajnija?"
       );
     } else {
       questions.push(
