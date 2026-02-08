@@ -12,6 +12,7 @@ import { useState, useEffect } from 'react';
 import { Textarea } from './ui/textarea';
 import { Button } from './ui/button';
 import { toast } from 'sonner@2.0.3';
+import { supabase } from '../lib/supabase';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -50,6 +51,9 @@ type ResultType =
 
 interface QuoteQuestHeroProps {
   onQuoteSaved: () => void;
+  onRequireAuth: () => void;
+  isAuthed: boolean;
+  currentUser: any;
 }
 
 const PLACEHOLDER_EXAMPLES = [
@@ -73,7 +77,12 @@ const SMART_SUGGESTIONS = [
   'Kratak sadržaj djela'
 ];
 
-export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
+export function QuoteQuestHero({ 
+  onQuoteSaved,
+  onRequireAuth,
+  isAuthed,
+  currentUser
+}: QuoteQuestHeroProps) {
   const [fileName, setFileName] = useState<string>('');
   const [file, setFile] = useState<File | null>(null);
   const [question, setQuestion] = useState<string>('');
@@ -151,6 +160,12 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
   };
 
   const handleSubmit = async () => {
+    if (!isAuthed) {
+      toast.info('Prijavite se kako biste započeli analizu');
+      onRequireAuth();
+      return;
+    }
+      
     if (!file) {
       toast.error('Molimo prvo učitajte PDF.');
       return;
@@ -254,40 +269,53 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
     }
   };
 
-  const toggleBookmark = (quoteId: string) => {
+  const toggleBookmark = async (quoteId: string) => {
+    if (!currentUser) {
+      toast.error('Prijavite se da sačuvate citate');
+      onRequireAuth();
+      return;
+    }
+
     setResults((prev) =>
       prev.map((quote) => {
         if (quote.id === quoteId) {
           const newState = !quote.isBookmarked;
 
           if (newState) {
-            const savedQuotes = JSON.parse(
-              localStorage.getItem('savedQuotes') || '[]'
-            );
-            savedQuotes.push({
-              id: quoteId,
-              text: quote.text,
-              page: quote.page,
-              element: quote.element || null,
-              meaning: quote.meaning || null,
-              context: quote.context || null,
-              dateSaved: new Date().toLocaleDateString('bs-BA', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric'
+            // Čuvaj u Supabase
+            supabase
+              .from('saved_quotes')
+              .insert({
+                user_id: currentUser.id,
+                quote_text: quote.text,
+                page_number: quote.page,
+                context: quote.context || null,
+                element: quote.element || null,
+                meaning: quote.meaning || null,
               })
-            });
-            localStorage.setItem('savedQuotes', JSON.stringify(savedQuotes));
-            toast.success('Citat sačuvan!');
-            onQuoteSaved();
+              .then(({ error }) => {
+                if (error) {
+                  console.error('Error saving quote:', error);
+                  toast.error('Greška pri čuvanju citata');
+                } else {
+                  toast.success('Citat sačuvan!');
+                  onQuoteSaved();
+                }
+              });
           } else {
-            const savedQuotes = JSON.parse(
-              localStorage.getItem('savedQuotes') || '[]'
-            );
-            const filtered = savedQuotes.filter((q: any) => q.id !== quoteId);
-            localStorage.setItem('savedQuotes', JSON.stringify(filtered));
-            toast.info('Citat uklonjen iz sačuvanih');
-            onQuoteSaved();
+            // Obriši iz Supabase
+            supabase
+              .from('saved_quotes')
+              .delete()
+              .eq('id', quoteId)
+              .then(({ error }) => {
+                if (error) {
+                  console.error('Error deleting quote:', error);
+                } else {
+                  toast.info('Citat uklonjen');
+                  onQuoteSaved();
+                }
+              });
           }
 
           return { ...quote, isBookmarked: newState };
@@ -321,8 +349,6 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
     >
       <div className="absolute inset-0 bg-gradient-to-br from-[#001F54]/20 via-transparent to-transparent" />
 
-     <div className="absolute inset-0 bg-gradient-to-br from-[#001F54]/20 via-transparent to-transparent" />
-      
       {/* Lijeva strelica */}
       <div className="hidden lg:block absolute left-8 top-1/2 -translate-y-1/2">
         <svg
@@ -626,7 +652,7 @@ export function QuoteQuestHero({ onQuoteSaved }: QuoteQuestHeroProps) {
 
                         <div className={quote.page > 0 && !isThemeOrIdea && !isSummary ? 'pr-10' : ''}>
                           {quote.element && (
-                            <p className="text-[#00D1FF] text-sm uppercase tracking-wide font-[Orbitron] mb-3">
+                            <p className="text-[#00D1FF] text-sm uppercase tracking-wide font-[#00D1FF] mb-3">
                               {quote.element}
                             </p>
                           )}
