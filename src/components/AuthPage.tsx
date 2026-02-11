@@ -2,8 +2,6 @@ import { useState } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Mail, Lock, User, X } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { toast } from 'sonner';
 
 interface AuthPageProps {
   open: boolean;
@@ -17,70 +15,88 @@ export function AuthPage({ open, onOpenChange, onSuccess }: AuthPageProps) {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
 
     if (!email || !password || (!isLogin && !name)) {
       setError('Molimo popunite sva polja');
-      setLoading(false);
       return;
     }
 
+    // Simple email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       setError('Unesite validnu email adresu');
-      setLoading(false);
       return;
     }
 
     if (password.length < 6) {
       setError('Lozinka mora imati najmanje 6 karaktera');
-      setLoading(false);
       return;
     }
 
-    try {
-      if (isLogin) {
-        // LOGIN
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: email,
-          password: password,
-        });
+    // Get existing users from localStorage
+    const users = JSON.parse(localStorage.getItem('quotequest_users') || '{}');
 
-        if (error) throw error;
-
-        toast.success('Uspješno prijavljeni!');
-        onSuccess(data.user);
-        onOpenChange(false);
-        resetForm();
-      } else {
-        // SIGNUP
-        const { data, error } = await supabase.auth.signUp({
-          email: email,
-          password: password,
-          options: {
-            data: {
-              full_name: name,
-            }
-          }
-        });
-
-        if (error) throw error;
-
-        toast.success('Nalog kreiran! Provjerite email za verifikaciju.');
-        onSuccess(data.user);
-        onOpenChange(false);
-        resetForm();
+    if (isLogin) {
+      // Login logic
+      const user = users[email];
+      if (!user || user.password !== password) {
+        setError('Pogrešan email ili lozinka');
+        return;
       }
-    } catch (error: any) {
-      console.error('Auth error:', error);
-      setError(error.message || 'Došlo je do greške');
-    } finally {
-      setLoading(false);
+      
+      const currentUser = {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        isPremium: user.isPremium || false,
+        questionsAsked: user.questionsAsked || 0,
+        lastQuestionTime: user.lastQuestionTime || null,
+        cooldownUntil: user.cooldownUntil || null,
+      };
+
+      localStorage.setItem('quotequest_currentUser', JSON.stringify(currentUser));
+      onSuccess(currentUser);
+      onOpenChange(false);
+      resetForm();
+    } else {
+      // Signup logic
+      if (users[email]) {
+        setError('Korisnik sa ovim emailom već postoji');
+        return;
+      }
+
+      const newUser = {
+        id: Date.now().toString(),
+        email,
+        name,
+        password,
+        isPremium: false,
+        questionsAsked: 0,
+        lastQuestionTime: null,
+        cooldownUntil: null,
+      };
+
+      users[email] = newUser;
+      localStorage.setItem('quotequest_users', JSON.stringify(users));
+
+      const currentUser = {
+        id: newUser.id,
+        email: newUser.email,
+        name: newUser.name,
+        isPremium: false,
+        questionsAsked: 0,
+        lastQuestionTime: null,
+        cooldownUntil: null,
+      };
+
+      localStorage.setItem('quotequest_currentUser', JSON.stringify(currentUser));
+      onSuccess(currentUser);
+      onOpenChange(false);
+      resetForm();
     }
   };
 
@@ -95,12 +111,14 @@ export function AuthPage({ open, onOpenChange, onSuccess }: AuthPageProps) {
 
   return (
     <>
+      {/* Full-screen overlay with 50/50 split */}
       <div 
         className="fixed inset-0 z-[200] bg-[#0A0F18]/95 backdrop-blur-sm flex items-center justify-center p-8"
         style={{
           animation: 'fadeIn 300ms ease-out'
         }}
       >
+        {/* Close button */}
         <button
           onClick={() => {
             onOpenChange(false);
@@ -115,10 +133,12 @@ export function AuthPage({ open, onOpenChange, onSuccess }: AuthPageProps) {
           <X className="w-5 h-5" />
         </button>
 
-        <div className="w-full max-w-[1400px] h-[90vh] grid grid-cols-1 md:grid-cols-2 rounded-2xl overflow-hidden shadow-2xl">
-          {/* Left side - Branding */}
+        {/* Two-column layout - 50/50 split */}
+        <div className="w-full max-w-[1400px] h-[90vh] grid grid-cols-2 rounded-2xl overflow-hidden shadow-2xl">
+          {/* Left side - Branding (50%) */}
           <div className="relative bg-gradient-to-br from-[#0A0F18] via-[#04245A] to-[#001F54] 
-                          flex items-center justify-center p-16 hidden md:flex">
+                          flex items-center justify-center p-16">
+            {/* Animated glow effects */}
             <div className="absolute inset-0 opacity-20">
               <div className="absolute top-1/3 left-1/2 w-[400px] h-[400px] 
                               bg-[#00CFFF] rounded-full blur-[120px] animate-pulse" />
@@ -153,12 +173,13 @@ export function AuthPage({ open, onOpenChange, onSuccess }: AuthPageProps) {
                 </p>
               </div>
 
+              {/* Features list */}
               <div className="space-y-5">
                 {[
                   'Instant AI pretraga kroz knjige',
                   'Precizni citati sa stranicama',
                   'Inteligentna analiza sadržaja',
-                  'Sačuvajte omiljene citate'
+                  'Napredne funkcije za premium korisnike'
                 ].map((feature, i) => (
                   <div key={i} className="flex items-center gap-4">
                     <div className="w-2 h-2 rounded-full bg-[#00CFFF]"
@@ -172,9 +193,10 @@ export function AuthPage({ open, onOpenChange, onSuccess }: AuthPageProps) {
             </div>
           </div>
 
-          {/* Right side - Form */}
-          <div className="bg-[#0A0F18] flex items-center justify-center p-8 md:p-16 overflow-y-auto">
+          {/* Right side - Form (50%) */}
+          <div className="bg-[#0A0F18] flex items-center justify-center p-16 overflow-y-auto">
             <div className="w-full max-w-md">
+              {/* Form Header */}
               <div className="mb-10">
                 <h2 
                   className="text-3xl text-[#E6F0FF] mb-3"
@@ -189,6 +211,7 @@ export function AuthPage({ open, onOpenChange, onSuccess }: AuthPageProps) {
                 </p>
               </div>
 
+              {/* Form */}
               <form onSubmit={handleSubmit} className="space-y-6">
                 {!isLogin && (
                   <div className="space-y-2">
@@ -205,7 +228,6 @@ export function AuthPage({ open, onOpenChange, onSuccess }: AuthPageProps) {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="Vaše ime i prezime"
-                        disabled={loading}
                         className="bg-[#04245A]/30 border-[#00CFFF]/20 text-[#E6F0FF] 
                                  pl-12 pr-4 h-14 text-base
                                  focus:border-[#00CFFF] focus:bg-[#04245A]/40
@@ -229,7 +251,6 @@ export function AuthPage({ open, onOpenChange, onSuccess }: AuthPageProps) {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="vas@email.com"
-                      disabled={loading}
                       className="bg-[#04245A]/30 border-[#00CFFF]/20 text-[#E6F0FF] 
                                pl-12 pr-4 h-14 text-base
                                focus:border-[#00CFFF] focus:bg-[#04245A]/40
@@ -252,7 +273,6 @@ export function AuthPage({ open, onOpenChange, onSuccess }: AuthPageProps) {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Najmanje 6 karaktera"
-                      disabled={loading}
                       className="bg-[#04245A]/30 border-[#00CFFF]/20 text-[#E6F0FF] 
                                pl-12 pr-4 h-14 text-base
                                focus:border-[#00CFFF] focus:bg-[#04245A]/40
@@ -269,18 +289,18 @@ export function AuthPage({ open, onOpenChange, onSuccess }: AuthPageProps) {
 
                 <Button
                   type="submit"
-                  disabled={loading}
                   className="w-full h-14 rounded-xl bg-gradient-to-r from-[#00CFFF] to-[#0FB2FF] 
                            hover:from-[#00CFFF]/90 hover:to-[#0FB2FF]/90 
                            text-[#0A0F18] transition-all duration-150 
                            shadow-[0_0_25px_rgba(0,207,255,0.4)] 
                            hover:shadow-[0_0_35px_rgba(0,207,255,0.5)]
-                           text-base font-bold disabled:opacity-50"
+                           text-base font-bold"
                   style={{ fontFamily: 'Orbitron, sans-serif' }}
                 >
-                  {loading ? 'Učitavanje...' : (isLogin ? 'Prijavi se' : 'Kreiraj nalog')}
+                  {isLogin ? 'Prijavi se' : 'Kreiraj nalog'}
                 </Button>
 
+                {/* Toggle Login/Signup */}
                 <div className="pt-6 text-center">
                   <button
                     type="button"
@@ -288,9 +308,8 @@ export function AuthPage({ open, onOpenChange, onSuccess }: AuthPageProps) {
                       setIsLogin(!isLogin);
                       setError('');
                     }}
-                    disabled={loading}
                     className="text-[#00CFFF] hover:text-[#00CFFF]/80 text-sm 
-                             transition-colors duration-150 disabled:opacity-50"
+                             transition-colors duration-150"
                   >
                     {isLogin ? (
                       <>

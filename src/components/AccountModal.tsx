@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
-import { Mail, Lock, User, ArrowRight, BookOpen } from 'lucide-react';
-import { authHelpers } from '../lib/supabase';
+import { Mail, Lock, User, Sparkles, ArrowRight, BookOpen } from 'lucide-react';
 
 interface AuthModalProps {
   open: boolean;
@@ -11,82 +10,95 @@ interface AuthModalProps {
   onSuccess: (user: any) => void;
 }
 
-export function AuthModal({ open, onOpenChange, onSuccess }: AuthModalProps) {
+// Funkcija je sada nazvana AccountModal
+export function AccountModal({ open, onOpenChange, onSuccess }: AuthModalProps) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
 
     if (!email || !password || (!isLogin && !name)) {
       setError('Molimo popunite sva polja');
-      setLoading(false);
       return;
     }
 
+    // Simple email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       setError('Unesite validnu email adresu');
-      setLoading(false);
       return;
     }
 
     if (password.length < 6) {
       setError('Lozinka mora imati najmanje 6 karaktera');
-      setLoading(false);
       return;
     }
 
-    try {
-      if (isLogin) {
-        const { data, error } = await authHelpers.signIn(email, password);
-        
-        if (error) {
-          setError('Pogrešan email ili lozinka');
-          setLoading(false);
-          return;
-        }
+    // Get existing users from localStorage
+    const users = JSON.parse(localStorage.getItem('quotequest_users') || '{}');
 
-        if (data.user) {
-          const currentUser = {
-            id: data.user.id,
-            email: data.user.email!,
-            name: data.user.user_metadata.name || 'Korisnik',
-            isPremium: data.user.user_metadata.isPremium || false,
-          };
-
-          onSuccess(currentUser);
-          onOpenChange(false);
-          resetForm();
-        }
-      } else {
-        const { data, error } = await authHelpers.signUp(email, password, name);
-        
-        if (error) {
-          if (error.message.includes('already registered')) {
-            setError('Korisnik sa ovim emailom već postoji');
-          } else {
-            setError(error.message);
-          }
-          setLoading(false);
-          return;
-        }
-
-        setError('');
-        alert('Proveri svoj email za verifikacioni link! 📧');
-        onOpenChange(false);
-        resetForm();
+    if (isLogin) {
+      // Login logic
+      const user = users[email];
+      if (!user || user.password !== password) {
+        setError('Pogrešan email ili lozinka');
+        return;
       }
-    } catch (err: any) {
-      setError(err.message || 'Došlo je do greške');
-    } finally {
-      setLoading(false);
+      
+      const currentUser = {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        isPremium: user.isPremium || false,
+        questionsAsked: user.questionsAsked || 0,
+        lastQuestionTime: user.lastQuestionTime || null,
+        cooldownUntil: user.cooldownUntil || null,
+      };
+
+      localStorage.setItem('quotequest_currentUser', JSON.stringify(currentUser));
+      onSuccess(currentUser);
+      onOpenChange(false);
+      resetForm();
+    } else {
+      // Signup logic
+      if (users[email]) {
+        setError('Korisnik sa ovim emailom već postoji');
+        return;
+      }
+
+      const newUser = {
+        id: Date.now().toString(),
+        email,
+        name,
+        password,
+        isPremium: false,
+        questionsAsked: 0,
+        lastQuestionTime: null,
+        cooldownUntil: null,
+      };
+
+      users[email] = newUser;
+      localStorage.setItem('quotequest_users', JSON.stringify(users));
+
+      const currentUser = {
+        id: newUser.id,
+        email: newUser.email,
+        name: newUser.name,
+        isPremium: false,
+        questionsAsked: 0,
+        lastQuestionTime: null,
+        cooldownUntil: null,
+      };
+
+      localStorage.setItem('quotequest_currentUser', JSON.stringify(currentUser));
+      onSuccess(currentUser);
+      onOpenChange(false);
+      resetForm();
     }
   };
 
@@ -95,7 +107,6 @@ export function AuthModal({ open, onOpenChange, onSuccess }: AuthModalProps) {
     setPassword('');
     setName('');
     setError('');
-    setLoading(false);
   };
 
   return (
@@ -114,6 +125,7 @@ export function AuthModal({ open, onOpenChange, onSuccess }: AuthModalProps) {
         </DialogDescription>
         
         <div className="grid grid-cols-1 lg:grid-cols-[1fr,auto] h-[100vh] max-h-[900px]">
+          {/* Left Side - Branding & Visual */}
           <div className="relative bg-gradient-to-br from-[#04245A] via-[#001F54] to-[#0A0F18] px-16 py-20 flex flex-col justify-between overflow-hidden hidden lg:flex">
             <div className="absolute inset-0 opacity-30">
               <div className="absolute top-32 left-32 w-[500px] h-[500px] bg-[#00CFFF] rounded-full blur-[140px]" />
@@ -125,18 +137,12 @@ export function AuthModal({ open, onOpenChange, onSuccess }: AuthModalProps) {
                 <div className="bg-[#00CFFF]/20 p-3.5 rounded-xl backdrop-blur-sm border border-[#00CFFF]/30">
                   <BookOpen className="w-9 h-9 text-[#00CFFF]" />
                 </div>
-                <h1 
-                  className="text-[32px] text-[#E6F0FF]"
-                  style={{ fontFamily: 'Orbitron, sans-serif' }}
-                >
+                <h1 className="text-[32px] text-[#E6F0FF]" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                   QuoteQuest
                 </h1>
               </div>
 
-              <h2 
-                className="text-5xl text-[#E6F0FF] mb-8 leading-[1.15]"
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
+              <h2 className="text-5xl text-[#E6F0FF] mb-8 leading-[1.15]" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                 Oslobodite moć<br />
                 <span className="text-[#00CFFF]">AI analize</span>
               </h2>
@@ -149,7 +155,7 @@ export function AuthModal({ open, onOpenChange, onSuccess }: AuthModalProps) {
               {[
                 'Instant AI pretraga kroz cijele knjige',
                 'Precizni citati sa stranicama',
-                'Sačuvaj svoje analize i citati'
+                'Neograničene analize za Premium korisnike'
               ].map((feature, index) => (
                 <div key={index} className="flex items-center gap-4">
                   <div className="w-2 h-2 rounded-full bg-[#00CFFF] shadow-[0_0_8px_rgba(0,207,255,0.5)]" />
@@ -159,29 +165,22 @@ export function AuthModal({ open, onOpenChange, onSuccess }: AuthModalProps) {
             </div>
           </div>
 
+          {/* Right Side - Auth Form */}
           <div className="bg-[#0A0F18]/60 px-8 py-20 lg:px-20 flex flex-col justify-center backdrop-blur-sm lg:w-[640px]">
             <div className="flex items-center gap-2 mb-8 lg:hidden">
               <BookOpen className="w-6 h-6 text-[#00CFFF]" />
-              <span 
-                className="text-xl text-[#E6F0FF]"
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
+              <span className="text-xl text-[#E6F0FF]" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                 QuoteQuest
               </span>
             </div>
 
             <div className="w-full max-w-[450px] mx-auto">
               <div className="mb-10">
-                <h3 
-                  className="text-[32px] text-[#E6F0FF] mb-3 leading-tight"
-                  style={{ fontFamily: 'Orbitron, sans-serif' }}
-                >
+                <h3 className="text-[32px] text-[#E6F0FF] mb-3 leading-tight" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                   {isLogin ? 'Dobrodošli nazad' : 'Kreirajte nalog'}
                 </h3>
                 <p className="text-[#E6F0FF]/60 text-[15px]">
-                  {isLogin 
-                    ? 'Ulogujte se da nastavite analizu' 
-                    : 'Započnite svoju literaturu analizu danas'}
+                  {isLogin ? 'Ulogujte se da nastavite analizu' : 'Započnite svoju literaturu analizu danas'}
                 </p>
               </div>
 
@@ -199,7 +198,6 @@ export function AuthModal({ open, onOpenChange, onSuccess }: AuthModalProps) {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="Vaše ime i prezime"
-                        disabled={loading}
                         className="bg-[#04245A]/30 border-[#00CFFF]/20 text-[#E6F0FF] pl-12 pr-4 h-[52px]
                                  focus:border-[#00CFFF] focus:shadow-[0_0_20px_rgba(0,207,255,0.15)]
                                  transition-all duration-150 rounded-xl text-[15px]"
@@ -220,7 +218,6 @@ export function AuthModal({ open, onOpenChange, onSuccess }: AuthModalProps) {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="vas@email.com"
-                      disabled={loading}
                       className="bg-[#04245A]/30 border-[#00CFFF]/20 text-[#E6F0FF] pl-12 pr-4 h-[52px]
                                focus:border-[#00CFFF] focus:shadow-[0_0_20px_rgba(0,207,255,0.15)]
                                transition-all duration-150 rounded-xl text-[15px]"
@@ -240,7 +237,6 @@ export function AuthModal({ open, onOpenChange, onSuccess }: AuthModalProps) {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Najmanje 6 karaktera"
-                      disabled={loading}
                       className="bg-[#04245A]/30 border-[#00CFFF]/20 text-[#E6F0FF] pl-12 pr-4 h-[52px]
                                focus:border-[#00CFFF] focus:shadow-[0_0_20px_rgba(0,207,255,0.15)]
                                transition-all duration-150 rounded-xl text-[15px]"
@@ -256,18 +252,15 @@ export function AuthModal({ open, onOpenChange, onSuccess }: AuthModalProps) {
 
                 <Button
                   type="submit"
-                  disabled={loading}
                   className="w-full h-[52px] rounded-xl bg-gradient-to-r from-[#00CFFF] to-[#0FB2FF] 
                            hover:from-[#00CFFF]/90 hover:to-[#0FB2FF]/90 
                            text-[#0A0F18] transition-all duration-150 
                            shadow-[0_0_30px_rgba(0,207,255,0.3)] hover:shadow-[0_0_40px_rgba(0,207,255,0.5)]
-                           group text-[15px] disabled:opacity-50 disabled:cursor-not-allowed"
+                           group text-[15px]"
                   style={{ fontFamily: 'Orbitron, sans-serif' }}
                 >
-                  <span className="mr-2">
-                    {loading ? 'Molim sačekaj...' : (isLogin ? 'Prijavi se' : 'Kreiraj nalog')}
-                  </span>
-                  {!loading && <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-150" />}
+                  <span className="mr-2">{isLogin ? 'Prijavi se' : 'Kreiraj nalog'}</span>
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-150" />
                 </Button>
 
                 <div className="pt-8 border-t border-[#00CFFF]/10 text-center">
@@ -277,8 +270,7 @@ export function AuthModal({ open, onOpenChange, onSuccess }: AuthModalProps) {
                       setIsLogin(!isLogin);
                       setError('');
                     }}
-                    disabled={loading}
-                    className="text-[#00CFFF] hover:text-[#00CFFF]/80 text-[13px] transition-colors duration-150 inline-flex items-center gap-1.5 disabled:opacity-50"
+                    className="text-[#00CFFF] hover:text-[#00CFFF]/80 text-[13px] transition-colors duration-150 inline-flex items-center gap-1.5"
                   >
                     {isLogin ? (
                       <>
