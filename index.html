@@ -15,8 +15,8 @@
 
       body {
         font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
-        background: #000000;
-        color: #ffffff;
+        background: linear-gradient(135deg, #0B2D5A 0%, #051525 50%, #0B2D5A 100%);
+        color: #49C1F3;
         min-height: 100vh;
         display: flex;
         flex-direction: column;
@@ -33,8 +33,8 @@
         position: absolute;
         inset: 0;
         background-image: 
-          linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+          linear-gradient(rgba(37, 148, 217, 0.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(37, 148, 217, 0.05) 1px, transparent 1px);
         background-size: 100px 100px;
         pointer-events: none;
       }
@@ -44,8 +44,33 @@
         content: '';
         position: absolute;
         inset: 0;
-        background: radial-gradient(circle at center, transparent 0%, rgba(0, 0, 0, 0.8) 100%);
+        background: radial-gradient(circle at center, transparent 0%, rgba(5, 21, 37, 0.95) 100%);
         pointer-events: none;
+      }
+
+      /* Glow orb */
+      .glow-orb {
+        position: absolute;
+        width: 1000px;
+        height: 1000px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: radial-gradient(circle, rgba(37, 148, 217, 0.1) 0%, transparent 60%);
+        animation: orb-pulse 4s ease-in-out infinite;
+        pointer-events: none;
+        z-index: 1;
+      }
+
+      @keyframes orb-pulse {
+        0%, 100% { 
+          opacity: 0.3; 
+          transform: translate(-50%, -50%) scale(0.9);
+        }
+        50% { 
+          opacity: 0.6; 
+          transform: translate(-50%, -50%) scale(1.1);
+        }
       }
 
       .container {
@@ -66,9 +91,12 @@
       .logo {
         font-size: clamp(3.5rem, 10vw, 7rem);
         font-weight: 700;
-        letter-spacing: -0.03em;
+        letter-spacing: 0.1em;
         margin-bottom: 2rem;
-        color: #ffffff;
+        background: linear-gradient(135deg, #2594D9 0%, #49C1F3 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
         text-transform: uppercase;
       }
 
@@ -76,16 +104,24 @@
       .subtitle {
         font-size: clamp(1.125rem, 2vw, 1.5rem);
         font-weight: 500;
-        color: #ffffff;
+        color: #2594D9;
         margin-bottom: 1.5rem;
-        letter-spacing: 0;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        animation: fade-in 2s ease-out;
+      }
+
+      @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
       }
 
       /* Description */
       .description {
         font-size: clamp(0.875rem, 1.5vw, 1rem);
         font-weight: 400;
-        color: rgba(255, 255, 255, 0.6);
+        color: #49C1F3;
+        opacity: 0.6;
         margin-bottom: 3rem;
         line-height: 1.6;
         max-width: 500px;
@@ -102,10 +138,11 @@
 
       .loading-bar {
         width: 100%;
-        height: 1px;
-        background: rgba(255, 255, 255, 0.1);
+        height: 3px;
+        background: rgba(37, 148, 217, 0.15);
         position: relative;
         overflow: hidden;
+        box-shadow: 0 0 15px rgba(37, 148, 217, 0.2);
       }
 
       .loading-progress {
@@ -113,9 +150,10 @@
         left: 0;
         top: 0;
         height: 100%;
-        width: 40%;
-        background: linear-gradient(90deg, transparent, #ffffff, transparent);
-        animation: loading 2s ease-in-out infinite;
+        width: 50%;
+        background: linear-gradient(90deg, transparent, #49C1F3, transparent);
+        animation: loading 2.5s ease-in-out infinite;
+        box-shadow: 0 0 30px rgba(73, 193, 243, 0.8);
       }
 
       @keyframes loading {
@@ -123,69 +161,13 @@
         100% { transform: translateX(350%); }
       }
 
-      /* Email form */
-      .email-form {
-        margin-bottom: 4rem;
-        max-width: 450px;
-        margin-left: auto;
-        margin-right: auto;
-      }
-
-      .email-wrapper {
-        display: flex;
-        gap: 0;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        border-radius: 0;
-        overflow: hidden;
-        transition: border-color 0.3s ease;
-      }
-
-      .email-wrapper:focus-within {
-        border-color: rgba(255, 255, 255, 0.4);
-      }
-
-      .email-input {
-        flex: 1;
-        padding: 1rem 1.25rem;
-        background: transparent;
-        border: none;
-        color: #ffffff;
-        font-size: 0.9375rem;
-        font-family: 'Inter', sans-serif;
-        outline: none;
-      }
-
-      .email-input::placeholder {
-        color: rgba(255, 255, 255, 0.3);
-      }
-
-      .email-button {
-        padding: 1rem 2rem;
-        background: #ffffff;
-        color: #000000;
-        border: none;
-        font-size: 0.9375rem;
-        font-weight: 500;
-        font-family: 'Inter', sans-serif;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        white-space: nowrap;
-      }
-
-      .email-button:hover {
-        background: rgba(255, 255, 255, 0.9);
-      }
-
-      .email-button:active {
-        transform: scale(0.98);
-      }
-
       /* Footer */
       .footer {
         position: absolute;
         bottom: 2rem;
         font-size: 0.8125rem;
-        color: rgba(255, 255, 255, 0.3);
+        color: #2594D9;
+        opacity: 0.5;
         font-weight: 400;
         letter-spacing: 0.1em;
       }
@@ -212,18 +194,6 @@
           margin-bottom: 2rem;
         }
 
-        .email-form {
-          margin-bottom: 3rem;
-        }
-
-        .email-wrapper {
-          flex-direction: column;
-        }
-
-        .email-button {
-          width: 100%;
-        }
-
         .footer {
           bottom: 1.5rem;
         }
@@ -232,13 +202,15 @@
   </head>
 
   <body>
+    <div class="glow-orb"></div>
+    
     <div class="container">
       <h1 class="logo">Quilora</h1>
       
       <p class="subtitle">A new version is coming soon</p>
       
       <p class="description">
-        Quote Quest is evolving into Quilora. Launching April 1st.
+        QuoteQuest is evolving into Quilora. Launching April 1st.
       </p>
 
       <div class="loading-container">
