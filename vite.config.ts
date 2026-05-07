@@ -17,7 +17,7 @@ import path from 'path';
  */
 
 export default defineConfig({
-  base: process.env.VITE_BASE_PATH || "/QuoteQuest", 
+  base: "/", 
   plugins: [react()],
 
   resolve: {
