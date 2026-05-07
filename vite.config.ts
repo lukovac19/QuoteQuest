@@ -2,6 +2,20 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import path from 'path';
 
+/*
+ * --- QuoteQuest Vite proxy (dev / preview) ---
+ *
+ * Proxy target: https://quotequest-1.onrender.com
+ *   → Zamijeni "TVOJ-BACKEND" stvarnim Render hostnameom u server.proxy i preview.proxy (target).
+ *
+ * Rewrite: DA — path.replace(/^\/api/, '')
+ *   → Backend u server.js ima POST "/ask-pdf" (BEZ /api prefiksa).
+ *   → Frontend zove "/api/ask-pdf"; rewrite šalje upstream kao "/ask-pdf".
+ *
+ * Lokalni backend port (server/server.js): process.env.PORT || 5000
+ *   → Na Renderu PORT postavlja platforma; lokalno često 5000 ako pokreneš node ručno.
+ */
+
 export default defineConfig({
   base: process.env.VITE_BASE_PATH || "/QuoteQuest", 
   plugins: [react()],
@@ -29,7 +43,7 @@ export default defineConfig({
       '@radix-ui/react-slot@1.1.2': '@radix-ui/react-slot',
       '@radix-ui/react-slider@1.2.3': '@radix-ui/react-slider',
       '@radix-ui/react-separator@1.1.2': '@radix-ui/react-separator',
-      '@radix-ui/react-select@2.1.6': '@radix-ui/react-select',
+      '@radix-ui/react-select@1.1.6': '@radix-ui/react-select',
       '@radix-ui/react-scroll-area@1.2.3': '@radix-ui/react-scroll-area',
       '@radix-ui/react-radio-group@1.2.3': '@radix-ui/react-radio-group',
       '@radix-ui/react-progress@1.1.2': '@radix-ui/react-progress',
@@ -59,5 +73,23 @@ export default defineConfig({
   server: {
     port: 5173,
     open: true,
+    proxy: {
+      '/api': {
+        target: 'https://quotequest-1.onrender.com',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api/, ''),
+      },
+    },
+  },
+
+  preview: {
+    port: 4173,
+    proxy: {
+      '/api': {
+        target: 'https://quotequest-1.onrender.com',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api/, ''),
+      },
+    },
   },
 });

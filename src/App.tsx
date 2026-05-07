@@ -101,10 +101,7 @@ export default function App() {
   };
 
   const handleLogin = () => {
-    console.log('✅ handleLogin pozvana u App.tsx!');
-    console.log('isAuthOpen prije:', isAuthOpen);
     setIsAuthOpen(true);
-    console.log('setIsAuthOpen(true) pozvano!');
   };
 
   const handleLogout = async () => {
@@ -151,10 +148,10 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0A0A0A] flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-[#0A0A0A]">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-[#00D1FF] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-[#E6F0FF] text-lg" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+          <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-4 border-[#00D1FF] border-t-transparent" />
+          <p className="text-lg text-[#E6F0FF]" style={{ fontFamily: 'Orbitron, sans-serif' }}>
             Učitavanje QuoteQuest...
           </p>
         </div>
@@ -163,7 +160,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-[#E6F0FF] overflow-x-hidden">
+    <div className="min-h-screen overflow-x-hidden bg-[#0A0A0A] text-[#E6F0FF]">
       <QuoteQuestNavigation
         onOpenSavedQuotes={() => {
           if (currentUser) {

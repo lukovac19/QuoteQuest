@@ -1,52 +1,34 @@
-import { Instagram, Mail, Coffee } from 'lucide-react';
+import { Instagram, Mail } from 'lucide-react';
 
 export function QuoteQuestFooter() {
   return (
-    <footer className="relative bg-[#0A0A0A] border-t border-[#00D1FF]/10">
-      <div className="max-w-[1200px] mx-auto px-6 py-8">
-        <div className="text-center space-y-4">
-          
-          <p className="text-[#E6F0FF]/60 text-sm max-w-[600px] mx-auto leading-relaxed">
-            Pratite nas na Instagramu da budete u toku! 
-            Za sva pitanja, nedoumice ili prijedloge pišite nam na Instagram ili email, uvijek smo tu :)
+    <footer className="relative border-t border-[#00D1FF]/10 bg-[#0A0A0A]">
+      <div className="mx-auto flex max-w-[1200px] justify-center px-6 py-8">
+        <div className="flex w-full max-w-[640px] flex-col items-center gap-4 text-center">
+          <p className="text-sm leading-relaxed text-[#E6F0FF]/60">
+            Pratite nas na Instagramu da budete u toku! Za sva pitanja, nedoumice ili prijedloge
+            pišite nam na Instagram ili email, uvijek smo tu :)
           </p>
 
-          {/* Podržite QuoteQuest */}
-          <div className="flex justify-center py-4">
-            <a
-              href="https://www.buymeacoffee.com/quotequest"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group relative inline-flex items-center gap-2 px-6 py-3 bg-[#001F54] border border-[#00D1FF]/30 rounded-lg overflow-hidden transition-all duration-300 hover:border-[#00D1FF] hover:shadow-[0_0_20px_rgba(0,209,255,0.3)]"
-            >
-              <div className="absolute inset-0 bg-gradient-to-r from-[#00D1FF]/0 via-[#00D1FF]/10 to-[#00D1FF]/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              
-              <Coffee className="w-5 h-5 text-[#00D1FF] relative z-10 transition-transform duration-300 group-hover:scale-110" />
-              <span className="relative z-10 text-[#E6F0FF] transition-colors duration-300 group-hover:text-[#00D1FF]">
-                Podržite QuoteQuest
-              </span>
-            </a>
-          </div>
-
-          <div className="flex items-center justify-center gap-6">
+          <div className="flex shrink-0 items-center justify-center gap-6">
             <a
               href="https://www.instagram.com/quotequest.site?igsh=cGMzY2pvYnI3bHVr"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-[#E6F0FF]/50 hover:text-[#00D1FF] transition-all duration-300 hover:scale-110"
+              className="text-[#E6F0FF]/50 transition-all duration-300 hover:scale-110 hover:text-[#00D1FF]"
             >
-              <Instagram className="w-5 h-5" />
+              <Instagram className="h-5 w-5" />
             </a>
             <a
               href="mailto:info.quotequest@gmail.com"
-              className="text-[#E6F0FF]/50 hover:text-[#00D1FF] transition-all duration-300 hover:scale-110"
+              className="text-[#E6F0FF]/50 transition-all duration-300 hover:scale-110 hover:text-[#00D1FF]"
             >
-              <Mail className="w-5 h-5" />
+              <Mail className="h-5 w-5" />
             </a>
           </div>
 
-          <p className="text-[#E6F0FF]/50 text-sm">
-            © 2026 QuoteQuest — Sva prava zadržana.
+          <p className="max-w-full text-xs tracking-wide text-[#E6F0FF]/40">
+            QuoteQuest — Ema Lukovac · {new Date().getFullYear()} · Sva prava zadržana.
           </p>
         </div>
       </div>

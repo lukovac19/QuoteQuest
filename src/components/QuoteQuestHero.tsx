@@ -14,7 +14,25 @@ import { Button } from './ui/button';
 import { toast } from 'sonner@2.0.3';
 import { supabase } from '../lib/supabase';
 
-const API_URL = import.meta.env.VITE_API_URL;
+function getApiBase(): string {
+  // Lokalno (npm run dev ili vite preview na localhostu): uvijek /api → Vite proxy, bez CORS-a.
+  // Samo na pravom deployu (npr. Vercel) koristimo puni URL iz env-a.
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname;
+    if (h === 'localhost' || h === '127.0.0.1') {
+      return '/api';
+    }
+  } else if (import.meta.env.DEV) {
+    return '/api';
+  }
+
+  const url = import.meta.env.VITE_API_URL?.trim().replace(/\/$/, '');
+  if (!url) {
+    console.warn('VITE_API_URL nije postavljen; API pozivi neće raditi u produkciji.');
+    return '';
+  }
+  return url;
+}
 
 interface Quote {
   id: string;
@@ -192,7 +210,14 @@ export function QuoteQuestHero({
       formData.append('file', file);
       formData.append('question', question);
 
-      const response = await fetch(`${API_URL}/ask-pdf`, {
+      const apiBase = getApiBase();
+      if (!apiBase) {
+        clearTimeout(timeoutId);
+        toast.error('API adresa nije konfigurirana.');
+        return;
+      }
+
+      const response = await fetch(`${apiBase}/ask-pdf`, {
         method: 'POST',
         body: formData,
         signal: controller.signal
@@ -345,103 +370,51 @@ export function QuoteQuestHero({
   return (
     <section
       id="home"
-      className="relative min-h-screen flex items-center justify-center bg-[#0A0A0A] pt-20"
+      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0A0A0A] pt-20"
     >
-      <div className="absolute inset-0 bg-gradient-to-br from-[#001F54]/20 via-transparent to-transparent" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[#001F54]/20 via-transparent to-transparent" />
+      <div
+        className="pointer-events-none absolute -top-32 left-1/2 h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[#00D1FF]/10 blur-[100px] hero-glow"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute bottom-0 right-0 h-[280px] w-[400px] rounded-full bg-[#001F54]/40 blur-[90px] opacity-60 animate-pulse-soft"
+        aria-hidden
+      />
 
-      {/* Lijeva strelica */}
-      <div className="hidden lg:block absolute left-8 top-1/2 -translate-y-1/2">
-        <svg
-          width="40"
-          height="200"
-          viewBox="0 0 40 200"
-          className="animate-bounce-slow"
-          style={{ animationDelay: '0s' }}
-        >
-          <line
-            x1="20"
-            y1="10"
-            x2="20"
-            y2="180"
-            stroke="#00D1FF"
-            strokeWidth="2"
-            strokeLinecap="round"
-            opacity="0.6"
-          />
-          <path
-            d="M20 180 L15 165 M20 180 L25 165"
-            stroke="#00D1FF"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            opacity="0.8"
-          />
-        </svg>
-      </div>
-
-      {/* Desna strelica */}
-      <div className="hidden lg:block absolute right-8 top-1/2 -translate-y-1/2">
-        <svg
-          width="40"
-          height="200"
-          viewBox="0 0 40 200"
-          className="animate-bounce-slow"
-          style={{ animationDelay: '0.3s' }}
-        >
-          <line
-            x1="20"
-            y1="10"
-            x2="20"
-            y2="180"
-            stroke="#00D1FF"
-            strokeWidth="2"
-            strokeLinecap="round"
-            opacity="0.6"
-          />
-          <path
-            d="M20 180 L15 165 M20 180 L25 165"
-            stroke="#00D1FF"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            opacity="0.8"
-          />
-        </svg>
-      </div>
-      
-      <div className="relative z-10 max-w-[1200px] mx-auto px-6 lg:px-12 py-20 w-full">
-        <div className="text-center mb-16">
+      <div className="relative z-10 mx-auto w-full max-w-[1200px] px-6 py-20 lg:px-12">
+        <div className="mb-16 animate-hero-in text-center">
           <h1
-            className="text-[#E6F0FF] mb-6"
+            className="mb-6 text-[#E6F0FF]"
             style={{
               fontFamily: 'Orbitron, sans-serif',
               fontSize: 'clamp(2rem, 5vw, 3.5rem)',
               lineHeight: '1.1',
-              letterSpacing: '-0.02em'
+              letterSpacing: '-0.02em',
             }}
           >
             Analizirajte knjige uz AI
           </h1>
-          <p className="text-[#E6F0FF]/70 text-lg md:text-xl max-w-3xl mx-auto">
+          <p className="animate-hero-in-delay mx-auto max-w-3xl text-lg text-[#E6F0FF]/70 md:text-xl">
             Učitajte PDF, postavite pitanje i pronađite tačne citate i stranice.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-5xl mx-auto">
+        <div className="animate-hero-columns mx-auto grid max-w-5xl grid-cols-1 gap-8 lg:grid-cols-2">
           <div className="space-y-6">
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <label
-                  className="block text-[#E6F0FF]"
-                  style={{ fontFamily: 'Orbitron, sans-serif' }}
-                >
+              <div className="mb-3 flex items-center justify-between">
+                <label className="block text-[#E6F0FF]" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                   1. Učitaj PDF
                 </label>
 
                 {fileName && (
                   <button
+                    type="button"
                     onClick={resetAnalysis}
-                    className="text-[#E6F0FF]/50 hover:text-[#00D1FF] transition-all text-sm flex items-center gap-1"
+                    className="flex items-center gap-1 text-sm text-[#E6F0FF]/50 transition-all hover:text-[#00D1FF]"
                   >
-                    <RotateCcw className="w-4 h-4" />
+                    <RotateCcw className="h-4 w-4" />
                     Reset
                   </button>
                 )}
@@ -461,35 +434,31 @@ export function QuoteQuestHero({
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
-                  className={`flex items-center justify-center gap-3 px-6 py-4 rounded-xl bg-[#001F54]/40 border-2 border-dashed transition-all cursor-pointer min-h-[120px] ${
+                  className={`flex min-h-[120px] cursor-pointer items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-4 transition-all ${
                     isDragOver
                       ? 'border-[#00D1FF] bg-[#001F54]/70 shadow-[0_0_20px_rgba(0,209,255,0.3)]'
-                      : 'border-[#00D1FF]/30 hover:border-[#00D1FF]/60 hover:bg-[#001F54]/60'
+                      : 'border-[#00D1FF]/30 bg-[#001F54]/40 hover:border-[#00D1FF]/60 hover:bg-[#001F54]/60'
                   }`}
                   style={{
                     boxShadow: isDragOver
                       ? '0 0 20px rgba(0,209,255,0.3)'
-                      : 'inset 0 1px 0 0 rgba(255,255,255,0.03)'
+                      : 'inset 0 1px 0 0 rgba(255,255,255,0.03)',
                   }}
                 >
                   <Upload
-                    className={`w-8 h-8 transition-all ${
-                      isDragOver ? 'text-[#00D1FF] scale-110' : 'text-[#00D1FF]'
-                    }`}
+                    className={`h-8 w-8 transition-all ${isDragOver ? 'scale-110 text-[#00D1FF]' : 'text-[#00D1FF]'}`}
                   />
 
                   <div className="text-center">
                     {fileName ? (
                       <>
                         <p className="text-[#E6F0FF]">{fileName}</p>
-                        <p className="text-[#00D1FF] text-sm">✓ Učitano</p>
+                        <p className="text-sm text-[#00D1FF]">✓ Učitano</p>
                       </>
                     ) : (
                       <>
                         <p className="text-[#E6F0FF]">Klikni ili prevuci PDF</p>
-                        <p className="text-[#E6F0FF]/50 text-sm">
-                          Maksimalno 10MB
-                        </p>
+                        <p className="text-sm text-[#E6F0FF]/50">Maksimalno 10MB</p>
                       </>
                     )}
                   </div>
@@ -498,10 +467,7 @@ export function QuoteQuestHero({
             </div>
 
             <div>
-              <label
-                className="block text-[#E6F0FF] mb-3"
-                style={{ fontFamily: 'Orbitron, sans-serif' }}
-              >
+              <label className="mb-3 block text-[#E6F0FF]" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                 2. Postavi pitanje
               </label>
 
@@ -517,31 +483,30 @@ export function QuoteQuestHero({
                       handleSubmit();
                     }
                   }}
-                  className="min-h-[150px] bg-[#001F54]/40 border-[#00D1FF]/30 text-[#E6F0FF] placeholder:text-[#E6F0FF]/40 focus:border-[#00D1FF] resize-none transition-all"
+                  className="min-h-[150px] resize-none border-[#00D1FF]/30 bg-[#001F54]/40 text-[#E6F0FF] placeholder:text-[#E6F0FF]/40 transition-all focus-visible:border-[#00D1FF]"
                   style={{
-                    boxShadow: 'inset 0 1px 0 0 rgba(255, 255, 255, 0.03)'
+                    boxShadow: 'inset 0 1px 0 0 rgba(255, 255, 255, 0.03)',
                   }}
                 />
 
                 {isCharacterizationQuestion && (
-                  <p className="text-[#E6F0FF]/40 text-xs mt-2">
+                  <p className="mt-2 text-xs text-[#E6F0FF]/40">
                     Tip: za karakterizaciju upiši TAČNO ime lika, npr.{' '}
-                    <span className="text-[#00D1FF]">
-                      "Karakterizacija lika Nora"
-                    </span>
+                    <span className="text-[#00D1FF]">&quot;Karakterizacija lika Nora&quot;</span>
                   </p>
                 )}
 
                 {showSuggestions && question.length === 0 && (
                   <div className="mt-3 space-y-2">
-                    <p className="text-[#E6F0FF]/50 text-sm">Prijedlozi:</p>
+                    <p className="text-sm text-[#E6F0FF]/50">Prijedlozi:</p>
 
                     <div className="flex flex-wrap gap-2">
                       {SMART_SUGGESTIONS.map((suggestion) => (
                         <button
                           key={suggestion}
+                          type="button"
                           onClick={() => handleSuggestionClick(suggestion)}
-                          className="px-3 py-1 rounded-full bg-[#001F54]/60 border border-[#00D1FF]/30 text-[#E6F0FF]/80 text-sm hover:border-[#00D1FF] hover:bg-[#001F54]/80 hover:shadow-[0_0_10px_rgba(0,209,255,0.2)] transition-all"
+                          className="rounded-full border border-[#00D1FF]/30 bg-[#001F54]/60 px-3 py-1 text-sm text-[#E6F0FF]/80 transition-all hover:border-[#00D1FF] hover:bg-[#001F54]/80 hover:shadow-[0_0_10px_rgba(0,209,255,0.2)]"
                         >
                           {suggestion}
                         </button>
@@ -555,60 +520,55 @@ export function QuoteQuestHero({
             <Button
               onClick={handleSubmit}
               disabled={isAnalyzing}
-              className="w-full py-6 rounded-xl bg-gradient-to-r from-[#00D1FF] to-[#0FB2FF] hover:from-[#00D1FF]/90 hover:to-[#0FB2FF]/90 text-[#0A0A0A] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full rounded-xl bg-gradient-to-r from-[#00D1FF] to-[#0FB2FF] py-6 text-[#0A0A0A] transition-all hover:from-[#00D1FF]/90 hover:to-[#0FB2FF]/90 disabled:cursor-not-allowed disabled:opacity-50"
               style={{ fontFamily: 'Orbitron, sans-serif' }}
             >
-              <Send className="w-5 h-5 mr-2" />
+              <Send className="mr-2 h-5 w-5" />
               {isAnalyzing ? 'Analizira se...' : 'Počni'}
             </Button>
           </div>
 
           <div>
-            <label
-              className="block text-[#E6F0FF] mb-3"
-              style={{ fontFamily: 'Orbitron, sans-serif' }}
-            >
+            <label className="mb-3 block text-[#E6F0FF]" style={{ fontFamily: 'Orbitron, sans-serif' }}>
               3. Rezultati
             </label>
 
             <div
-              className="p-6 rounded-xl bg-[#001F54]/40 border border-[#00D1FF]/30 min-h-[380px] max-h-[600px] overflow-y-auto custom-scrollbar"
+              className="custom-scrollbar max-h-[600px] min-h-[380px] overflow-y-auto rounded-xl border border-[#00D1FF]/30 bg-[#001F54]/40 p-6"
               style={{
-                boxShadow: 'inset 0 1px 0 0 rgba(255, 255, 255, 0.03)'
+                boxShadow: 'inset 0 1px 0 0 rgba(255, 255, 255, 0.03)',
               }}
             >
               {isAnalyzing ? (
-                <div className="flex flex-col items-center justify-center h-full space-y-4">
-                  <Loader2 className="w-12 h-12 text-[#00D1FF] animate-spin" />
+                <div className="flex h-full flex-col items-center justify-center space-y-4">
+                  <Loader2 className="h-12 w-12 animate-spin text-[#00D1FF]" />
                   <p className="text-[#E6F0FF]/60">AI analizira tekst...</p>
-                  <p className="text-[#E6F0FF]/40 text-sm text-center">
+                  <p className="text-center text-sm text-[#E6F0FF]/40">
                     Ovo može potrajati 1-2 minute za veće PDF-ove
                   </p>
                 </div>
               ) : resultType !== 'none' && results.length > 0 ? (
                 <div className="space-y-6">
                   {resultType === 'count' && countMeta && (
-                    <div className="p-4 rounded-xl bg-[#0A0A0A]/50 border border-[#00D1FF]/30 mb-4">
-                      <p className="text-[#9BD8FF] uppercase tracking-wide font-[Orbitron] mb-2 text-sm">
+                    <div className="mb-4 rounded-xl border border-[#00D1FF]/30 bg-[#0A0A0A]/50 p-4">
+                      <p className="mb-2 font-[Orbitron] text-sm uppercase tracking-wide text-[#9BD8FF]">
                         STATISTIKA RIJEČI
                       </p>
-                      <p className="text-[#E6F0FF] mb-1">
+                      <p className="mb-1 text-[#E6F0FF]">
                         Riječ: <strong>{countMeta.word}</strong>
                       </p>
-                      <p className="text-[#E6F0FF] mb-3">
+                      <p className="mb-3 text-[#E6F0FF]">
                         Ukupno: <strong>{countMeta.total} puta</strong>
                       </p>
-                      
+
                       {countMeta.perPage.length > 0 && (
                         <div className="mt-2">
-                          <p className="text-[#9BD8FF] text-xs mb-1">
-                            Po stranicama:
-                          </p>
+                          <p className="mb-1 text-xs text-[#9BD8FF]">Po stranicama:</p>
                           <div className="flex flex-wrap gap-2">
                             {countMeta.perPage.slice(0, 10).map((p, i) => (
                               <span
                                 key={i}
-                                className="px-2 py-1 rounded bg-[#00D1FF]/10 text-[#00D1FF] text-xs border border-[#00D1FF]/30"
+                                className="rounded border border-[#00D1FF]/30 bg-[#00D1FF]/10 px-2 py-1 text-xs text-[#00D1FF]"
                               >
                                 Str. {p.page}: {p.count}×
                               </span>
@@ -627,14 +587,15 @@ export function QuoteQuestHero({
                         animation: `fadeIn 0.5s ease-in ${index * 0.1}s both`
                       }}
                     >
-                      <div className="p-4 rounded-xl bg-[#0A0A0A]/50 border border-[#00D1FF]/20 hover:border-[#00D1FF]/40 transition-all group">
+                      <div className="group relative rounded-xl border border-[#00D1FF]/20 bg-[#0A0A0A]/50 p-4 transition-all hover:border-[#00D1FF]/40">
                         {quote.page > 0 && !isThemeOrIdea && !isSummary && (
                           <button
+                            type="button"
                             onClick={() => toggleBookmark(quote.id)}
-                            className={`absolute top-3 right-3 p-2 rounded-lg transition-all duration-300 ${
+                            className={`absolute right-3 top-3 rounded-lg p-2 transition-all duration-300 ${
                               quote.isBookmarked
-                                ? 'text-[#00D1FF] bg-[#00D1FF]/10'
-                                : 'text-[#E6F0FF]/40 hover:text-[#00D1FF] hover:bg-[#00D1FF]/10'
+                                ? 'bg-[#00D1FF]/10 text-[#00D1FF]'
+                                : 'text-[#E6F0FF]/40 hover:bg-[#00D1FF]/10 hover:text-[#00D1FF]'
                             }`}
                             style={{
                               animation: quote.isBookmarked
@@ -652,24 +613,22 @@ export function QuoteQuestHero({
 
                         <div className={quote.page > 0 && !isThemeOrIdea && !isSummary ? 'pr-10' : ''}>
                           {quote.element && (
-                            <p className="text-[#00D1FF] text-sm uppercase tracking-wide font-[#00D1FF] mb-3">
+                            <p className="mb-3 text-sm uppercase tracking-wide text-[#00D1FF]">
                               {quote.element}
                             </p>
                           )}
 
                           {quote.text && (
                             <p
-                              className="text-[#E6F0FF]/80 leading-relaxed mb-3 whitespace-pre-wrap"
-                              style={{
-                                textShadow: '0 0 10px rgba(0,209,255,0.1)'
-                              }}
+                              className="mb-3 whitespace-pre-wrap leading-relaxed text-[#E6F0FF]/80"
+                              style={{ textShadow: '0 0 10px rgba(0,209,255,0.1)' }}
                             >
                               {isThemeOrIdea || isSummary ? quote.text : `"${quote.text}"`}
                             </p>
                           )}
 
                           {quote.meaning && (
-                            <p className="text-[#7FA4D6] text-sm mb-3 leading-relaxed">
+                            <p className="mb-3 text-sm leading-relaxed text-[#7FA4D6]">
                               💡 {quote.meaning}
                             </p>
                           )}
@@ -677,15 +636,16 @@ export function QuoteQuestHero({
                           {quote.page > 0 && !isSummary && (
                             <>
                               <div className="flex items-center gap-2 text-sm mb-3">
-                                <span className="px-2 py-1 rounded bg-[#00D1FF]/10 text-[#00D1FF] border border-[#00D1FF]/30">
+                                <span className="rounded border border-[#00D1FF]/30 bg-[#00D1FF]/10 px-2 py-1 text-[#00D1FF]">
                                   Stranica {quote.page}
                                 </span>
                               </div>
 
                               {quote.context && !isThemeOrIdea && (
                                 <button
+                                  type="button"
                                   onClick={() => toggleContext(quote.id)}
-                                  className="flex items-center gap-2 text-[#E6F0FF]/50 hover:text-[#00D1FF] transition-all text-sm"
+                                  className="flex items-center gap-2 text-sm text-[#E6F0FF]/50 transition-all hover:text-[#00D1FF]"
                                 >
                                   {quote.expandedContext ? (
                                     <>
@@ -707,10 +667,10 @@ export function QuoteQuestHero({
 
                       {quote.expandedContext && quote.context && quote.page > 0 && !isThemeOrIdea && !isSummary && (
                         <div
-                          className="p-4 rounded-xl bg-[#001F54]/20 border border-[#00D1FF]/10"
+                          className="rounded-xl border border-[#00D1FF]/10 bg-[#001F54]/20 p-4"
                           style={{ animation: 'fadeIn 0.3s ease-in' }}
                         >
-                          <p className="text-[#E6F0FF]/60 text-sm leading-relaxed whitespace-pre-wrap">
+                          <p className="whitespace-pre-wrap text-sm leading-relaxed text-[#E6F0FF]/60">
                             {quote.context}
                           </p>
                         </div>
@@ -719,11 +679,8 @@ export function QuoteQuestHero({
                   ))}
 
                   {followUpQuestions.length > 0 && (
-                    <div className="pt-4 border-t border-[#00D1FF]/10">
-                      <p
-                        className="text-[#E6F0FF]/70 text-sm mb-3"
-                        style={{ fontFamily: 'Orbitron, sans-serif' }}
-                      >
+                    <div className="border-t border-[#00D1FF]/10 pt-4">
+                      <p className="mb-3 text-sm text-[#E6F0FF]/70" style={{ fontFamily: 'Orbitron, sans-serif' }}>
                         Predložena pitanja:
                       </p>
 
@@ -731,8 +688,9 @@ export function QuoteQuestHero({
                         {followUpQuestions.map((q, index) => (
                           <button
                             key={index}
+                            type="button"
                             onClick={() => handleFollowUpClick(q)}
-                            className="w-full text-left px-4 py-2 rounded-lg bg-[#001F54]/30 border border-[#00D1FF]/20 text-[#E6F0FF]/70 text-sm hover:border-[#00D1FF]/50 hover:bg-[#001F54]/50 hover:text-[#E6F0FF] transition-all"
+                            className="w-full rounded-lg border border-[#00D1FF]/20 bg-[#001F54]/30 px-4 py-2 text-left text-sm text-[#E6F0FF]/70 transition-all hover:border-[#00D1FF]/50 hover:bg-[#001F54]/50 hover:text-[#E6F0FF]"
                           >
                             → {q}
                           </button>
@@ -742,11 +700,11 @@ export function QuoteQuestHero({
                   )}
                 </div>
               ) : resultType !== 'none' ? (
-                <div className="flex items-center justify-center h-full text-[#E6F0FF]/40 text-center">
+                <div className="flex h-full items-center justify-center text-center text-[#E6F0FF]/40">
                   <p>Nema rezultata za prikaz</p>
                 </div>
               ) : (
-                <div className="flex items-center justify-center h-full text-[#E6F0FF]/40 text-center">
+                <div className="flex h-full items-center justify-center text-center text-[#E6F0FF]/40">
                   <p>Učitajte PDF i postavite pitanje da vidite rezultate</p>
                 </div>
               )}
@@ -763,6 +721,42 @@ export function QuoteQuestHero({
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(10px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes heroGlow {
+          0%, 100% { opacity: 0.35; transform: translate(-50%, 0) scale(1); }
+          50% { opacity: 0.55; transform: translate(-50%, 0) scale(1.05); }
+        }
+        @keyframes pulseSoft {
+          0%, 100% { opacity: 0.45; }
+          50% { opacity: 0.75; }
+        }
+        @keyframes heroIn {
+          from { opacity: 0; transform: translateY(16px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .hero-glow {
+          animation: heroGlow 14s ease-in-out infinite;
+        }
+        .animate-pulse-soft {
+          animation: pulseSoft 8s ease-in-out infinite;
+        }
+        .animate-hero-in {
+          animation: heroIn 0.75s ease-out both;
+        }
+        .animate-hero-in-delay {
+          animation: heroIn 0.75s ease-out 0.12s both;
+        }
+        .animate-hero-columns {
+          animation: heroIn 0.85s ease-out 0.2s both;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .hero-glow,
+          .animate-pulse-soft,
+          .animate-hero-in,
+          .animate-hero-in-delay,
+          .animate-hero-columns {
+            animation: none !important;
+          }
         }
       `}</style>
     </section>
